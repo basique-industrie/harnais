@@ -1,0 +1,37 @@
+{
+  "display_information": {
+    "name": "Harnais",
+    "description": "Connect Slack once for your local coding tools",
+    "background_color": "#10141b"
+  },
+  "oauth_config": {
+    "redirect_urls": [
+      "http://127.0.0.1:8788/callback"
+    ],
+    "scopes": {
+      "user": [
+        "search:read.public",
+        "search:read.private",
+        "search:read.im",
+        "search:read.mpim",
+        "search:read.files",
+        "search:read.users",
+        "files:read",
+        "channels:history",
+        "groups:history",
+        "im:history",
+        "mpim:history",
+        "users:read",
+        "users:read.email",
+        "emoji:read"
+      ]
+    },
+    "pkce_enabled": true
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": true,
+    "is_mcp_enabled": true
+  }
+}

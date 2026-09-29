@@ -1,0 +1,13 @@
+.build/
+.swiftpm/
+dist/
+*.app
+.DS_Store
+
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.p12
+*.p8
+Sources/Infrastructure/Resources/official-oauth-clients.json

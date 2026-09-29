@@ -1,0 +1,96 @@
+// swift-tools-version: 6.2
+import PackageDescription
+
+let package = Package(
+    name: "Harnais",
+    platforms: [
+        .macOS(.v26),
+    ],
+    products: [
+        // GUI product cannot be named "Harnais": APFS is case-insensitive, so it
+        // collides with the `harnais` CLI and the last build overwrites the app.
+        .executable(name: "HarnaisApp", targets: ["HarnaisApp"]),
+        .executable(name: "harnais", targets: ["HarnaisCLI"]),
+        .executable(name: "HarnaisTests", targets: ["HarnaisTests"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.19.0"),
+        .package(url: "https://github.com/dduan/TOMLDecoder.git", exact: "0.4.5"),
+    ],
+    targets: [
+        .target(
+            name: "Domain",
+            path: "Sources/Domain",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .target(
+            name: "Infrastructure",
+            dependencies: [
+                "Domain",
+                .product(name: "TOMLDecoder", package: "TOMLDecoder"),
+            ],
+            path: "Sources/Infrastructure",
+            resources: [
+                .copy("Resources/iles-extension"),
+                .copy("Resources/official-oauth-clients.json"),
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .target(
+            name: "HarnaisCore",
+            dependencies: [
+                "Domain",
+                "Infrastructure",
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
+            ],
+            path: "Sources/HarnaisCore",
+            exclude: [
+                "Info.plist",
+                "Harnais.entitlements",
+                "Resources/PrivacyInfo.xcprivacy",
+            ],
+            resources: [
+                .process("Resources"),
+            ],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .executableTarget(
+            name: "HarnaisApp",
+            dependencies: [
+                "HarnaisCore",
+            ],
+            path: "Sources/HarnaisApp",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .executableTarget(
+            name: "HarnaisCLI",
+            dependencies: [
+                "Domain",
+                "Infrastructure",
+            ],
+            path: "Sources/HarnaisCLI",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .executableTarget(
+            name: "HarnaisTests",
+            dependencies: [
+                "Domain",
+                "Infrastructure",
+            ],
+            path: "Tests/HarnaisTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+    ]
+)

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-package:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: Helpers/WhatsAppBridge/go.mod
+          cache-dependency-path: Helpers/WhatsAppBridge/go.sum
+
+      - name: Select latest Xcode
+        run: |
+          ls /Applications | grep -i xcode
+          sudo xcode-select -s "/Applications/$(ls /Applications | grep -E '^Xcode_[0-9.]+.app$' | sort -V | tail -n 1)"
+          xcodebuild -version
+          swift --version
+
+      - name: Build
+        run: swift build -c debug
+
+      - name: Public source checks
+        run: python3 scripts/check-public-release.py
+
+      - name: Test WhatsApp helper
+        run: go test ./...
+        working-directory: Helpers/WhatsAppBridge
+
+      - name: Test
+        run: ./scripts/test.sh
+
+      - name: Package (dev, ad-hoc signed)
+        run: ./scripts/package.sh --dev
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Harnais-Dev-app
+          path: dist/Harnais Dev.app
+          retention-days: 7
