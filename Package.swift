@@ -1,5 +1,11 @@
 // swift-tools-version: 6.2
 import PackageDescription
+import Foundation
+
+let nativeOAuthCatalog = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    .appendingPathComponent("Sources/Infrastructure/Resources/official-oauth-clients.json")
+let nativeOAuthResources: [Resource] = FileManager.default.fileExists(atPath: nativeOAuthCatalog.path)
+    ? [.copy("Resources/official-oauth-clients.json")] : []
 
 let package = Package(
     name: "Harnais",
@@ -34,8 +40,7 @@ let package = Package(
             path: "Sources/Infrastructure",
             resources: [
                 .copy("Resources/iles-extension"),
-                .copy("Resources/official-oauth-clients.json"),
-            ],
+            ] + nativeOAuthResources,
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

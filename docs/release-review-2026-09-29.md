@@ -2,7 +2,7 @@
 
 ## Validation
 
-- Harnais: 893 self-tests passed; WhatsApp Go helper tests passed.
+- Harnais: 894 self-tests passed; WhatsApp Go helper tests passed.
 - Iles: 724 tests passed, including refresh-state completion and cancellation checks.
 - Release builds and packaged resource/signature checks passed for both Dev apps.
 - Live review covered seven account profiles across Claude, Codex, Cursor and OpenCode, account settings, About pages, and Overview layout.
@@ -15,6 +15,13 @@
 - Account actions distinguish removal from sign-in; configuration sheets identify their account.
 - Overview identifies quota windows and remaining allowance; monetary totals are labeled as estimates.
 - Iles uses consistent About actions and observable refresh state for loading rings.
+
+## Public source builds
+
+The native OAuth catalog is excluded from Git and injected only in the protected
+release job. The SwiftPM resource is conditional so a clean public checkout builds
+without it. Registration tests cover decoding independently of the production
+catalog and refuse to substitute unrelated user credentials.
 
 ## Distribution limits
 
