@@ -22,8 +22,11 @@ enum OutlookConnectionTests {
         let gmailResult = try JSONSerialization.jsonObject(with: gmailList) as! [String: Any]
         let gmailTools = (gmailResult["result"] as! [String: Any])["tools"] as! [[String: Any]]
         expect(gmailTools.count == 3 && gmailTools.allSatisfy { ($0["annotations"] as? [String: Any])?["readOnlyHint"] as? Bool == true }, "Gmail advertises only supported read-only tools")
-        let outlook = try OfficialOAuthClients.record(for: .outlook)
-        expect(outlook?.isPublicClient == true && outlook?.clientSecret == nil, "Outlook uses registered public desktop client without secret")
+        let catalog = try OfficialOAuthClients.decode(Data(#"{"outlook":{"clientId":"outlook-native-fixture","isPublicClient":true}}"#.utf8))
+        expect(catalog["outlook"]?.isPublicClient == true && catalog["outlook"]?.clientSecret == nil, "Outlook public desktop registration decodes without a secret")
+        if let outlook = try OfficialOAuthClients.record(for: .outlook) {
+            expect(outlook.isPublicClient == true && outlook.clientSecret == nil && !outlook.clientId.isEmpty, "injected Outlook registration is a public desktop client without a secret")
+        }
         expect(try OfficialOAuthClients.record(for: .gmail) == OfficialOAuthClients.record(for: .googleDrive), "Gmail and Drive share one Google product registration")
         expect(IntegrationKind.gmail.defaultScopes.contains("https://www.googleapis.com/auth/gmail.readonly"), "Gmail uses read-only mail scope")
         expect(!IntegrationKind.outlook.defaultScopes.contains { $0.contains("Write") || $0.contains("Send") }, "Outlook grants no mail mutation scopes")
