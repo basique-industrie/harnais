@@ -27,7 +27,7 @@ case "$VARIANT" in
   shipped)
     APP_NAME="Harnais"
     IDENTIFIER="com.jean.harnais"
-    EXECUTABLE_NAME="Harnais"
+    EXECUTABLE_NAME="HarnaisApp"
     ;;
 esac
 
@@ -61,6 +61,16 @@ mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
 install -m 0755 "$BINARY" "$STAGED_APP/Contents/MacOS/$EXECUTABLE_NAME"
 install -m 0755 "$CLI_BINARY" "$STAGED_APP/Contents/MacOS/harnais"
 install -m 0755 "$WHATSAPP_BINARY" "$STAGED_APP/Contents/MacOS/harnais-whatsapp"
+# macOS volumes are usually case-insensitive. The GUI and CLI must survive
+# packaging as distinct executables, including in the shipped variant.
+cmp -s "$BINARY" "$STAGED_APP/Contents/MacOS/$EXECUTABLE_NAME" || {
+  echo 'Packaged app executable differs from the GUI build.' >&2
+  exit 1
+}
+cmp -s "$CLI_BINARY" "$STAGED_APP/Contents/MacOS/harnais" || {
+  echo 'Packaged CLI executable differs from the CLI build.' >&2
+  exit 1
+}
 install -m 0644 Sources/HarnaisCore/Info.plist "$STAGED_APP/Contents/Info.plist"
 plutil -replace CFBundleIdentifier -string "$IDENTIFIER" "$STAGED_APP/Contents/Info.plist"
 plutil -replace CFBundleName -string "$APP_NAME" "$STAGED_APP/Contents/Info.plist"

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 - 2026-09-29
+
+- Keep the app and command-line executable separate on case-insensitive macOS volumes so the installed app opens correctly.
+- Check both development and production packaging in CI.
+
 ## 0.1.0 - 2026-09-29
 
 - Manage isolated Claude, Codex, Cursor and OpenCode accounts, logins and terminal commands.

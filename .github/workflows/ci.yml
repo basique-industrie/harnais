@@ -40,8 +40,10 @@ jobs:
       - name: Test
         run: ./scripts/test.sh
 
-      - name: Package (dev, ad-hoc signed)
-        run: ./scripts/package.sh --dev
+      - name: Package both app variants (ad-hoc signed)
+        run: |
+          ./scripts/package.sh --dev
+          ./scripts/package.sh --shipped
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
