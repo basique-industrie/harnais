@@ -151,7 +151,7 @@ final class VectorMarkContainerView: NSView {
 enum HarnaisResourceBundle {
     static let bundle: Bundle = resolve(applicationBundle: .main, moduleBundle: .module)
 
-    static func resolve(applicationBundle: Bundle, moduleBundle: Bundle) -> Bundle {
+    static func resolve(applicationBundle: Bundle, moduleBundle: @autoclosure () -> Bundle) -> Bundle {
         let candidates = [
             applicationBundle.bundleURL.appendingPathComponent("Harnais_HarnaisCore.bundle"),
             applicationBundle.resourceURL?.appendingPathComponent("Harnais_HarnaisCore.bundle"),
@@ -161,7 +161,7 @@ enum HarnaisResourceBundle {
                 return bundle
             }
         }
-        return moduleBundle
+        return moduleBundle()
     }
 }
 

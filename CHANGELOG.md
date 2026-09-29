@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-09-29
+
+- Load app icons from the installed bundle before evaluating SwiftPM's build-machine fallback.
+- Include the production executable packaging fix from 0.1.1.
+
 ## 0.1.1 - 2026-09-29
 
 - Keep the app and command-line executable separate on case-insensitive macOS volumes so the installed app opens correctly.

@@ -44,6 +44,7 @@ enum HarnaisSelfTests {
         defer { try? FileManager.default.removeItem(at: root) }
 
         try ProcessRunnerTests.run(expect: expect)
+        try PackagedResourcesTests.run(root: root, expect: expect)
         #if DEBUG
         try HTTPTransferTests.run(expect: expect)
         #endif

@@ -62,6 +62,7 @@ let package = Package(
                 .process("Resources"),
             ],
             swiftSettings: [
+                .unsafeFlags(["-enable-testing"], .when(configuration: .debug)),
                 .swiftLanguageMode(.v6),
             ]
         ),
@@ -91,6 +92,7 @@ let package = Package(
             dependencies: [
                 "Domain",
                 "Infrastructure",
+                "HarnaisCore",
             ],
             path: "Tests/HarnaisTests",
             swiftSettings: [
