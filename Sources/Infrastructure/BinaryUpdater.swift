@@ -74,7 +74,8 @@ public struct BinaryUpdater: Sendable {
             executable: executable,
             arguments: plan.arguments,
             environment: env,
-            timeout: 180
+            timeout: 180,
+            workingDirectory: Self.home
         )
         if result.exitCode != 0 {
             throw HarnaisError.updateFailed(result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -206,6 +207,7 @@ public struct BinaryUpdater: Sendable {
                 arguments: ["which", binaryPath.lastPathComponent],
                 environment: env,
                 timeout: 8,
+                workingDirectory: home,
                 mergeStandardError: false
             ), result.exitCode == 0 else { return nil }
             installedPath = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -215,6 +217,7 @@ public struct BinaryUpdater: Sendable {
             arguments: ["ls", "--json"],
             environment: env,
             timeout: 8,
+            workingDirectory: home,
             mergeStandardError: false
         ), result.exitCode == 0 else { return nil }
         guard let tool = miseTool(listing: result.output, installedPath: installedPath) else { return nil }
@@ -302,6 +305,7 @@ public struct BinaryUpdater: Sendable {
             arguments: ["latest", mise.tool],
             environment: env,
             timeout: 8,
+            workingDirectory: home,
             mergeStandardError: false
         )
         let output = result?.exitCode == 0 ? result?.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
@@ -339,6 +343,11 @@ public struct BinaryUpdater: Sendable {
         }
         LatestVersionCache.shared.set(cacheKey, version)
         return version
+    }
+
+    /// mise picks versions by directory; match the terminal probe, which runs in $HOME.
+    private static var home: URL {
+        FileManager.default.homeDirectoryForCurrentUser
     }
 
     private static func makePlan(executable: String, arguments: [String]) -> BinaryUpdatePlan {
