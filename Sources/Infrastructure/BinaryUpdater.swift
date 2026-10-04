@@ -2,7 +2,8 @@ import Domain
 import Foundation
 
 /// Resolves and runs CLI updates the way T3 does: native `update`, Homebrew,
-/// bun/pnpm/npm globals, plus an npm-registry latest check.
+/// bun/pnpm/npm globals, plus an npm-registry latest check. mise installs are
+/// upgraded through mise so the configured version moves with the binary.
 public struct BinaryUpdater: Sendable {
     public var runner: ProcessRunner
 
@@ -18,16 +19,21 @@ public struct BinaryUpdater: Sendable {
         fetchLatest: Bool = true
     ) -> VersionAdvisory {
         let realPath = URL(fileURLWithPath: binaryPath).resolvingSymlinksInPath().path
+        let mise = Self.isMiseManaged(binaryPath: binaryPath, realPath: realPath)
+            ? Self.miseOwnership(binaryPath: binaryPath, realPath: realPath, environment: environment, runner: runner)
+            : nil
         let plan = Self.plan(
             provider: provider,
             binaryPath: binaryPath,
-            realPath: realPath
+            realPath: realPath,
+            mise: mise
         )
         let latest: String?
         if fetchLatest {
             latest = Self.latestVersion(
                 provider: provider,
                 realPath: realPath,
+                mise: mise,
                 environment: environment,
                 runner: runner
             )
@@ -68,24 +74,36 @@ public struct BinaryUpdater: Sendable {
             executable: executable,
             arguments: plan.arguments,
             environment: env,
-            timeout: 180
+            timeout: 180,
+            workingDirectory: Self.home
         )
         if result.exitCode != 0 {
             throw HarnaisError.updateFailed(result.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 ? "Update exited \(result.exitCode)."
                 : result.output)
         }
+        // Updates can move the binary; mise installs into a new versioned directory.
+        BinaryLocator.resetCachedPath()
         return result
     }
 
     public static func plan(
         provider: ProviderKind,
         binaryPath: String,
-        realPath: String
+        realPath: String,
+        mise: MiseOwnership? = nil
     ) -> BinaryUpdatePlan? {
         let normalized = normalize(realPath)
         let resolvedNormalized = normalize(binaryPath)
         let paths = [normalized, resolvedNormalized]
+
+        // Self-updaters cannot see mise's version pin and fail or get reverted.
+        if let mise {
+            return makePlan(executable: mise.executable, arguments: ["upgrade", "--bump", mise.tool])
+        }
+        if isMiseManaged(binaryPath: binaryPath, realPath: realPath) {
+            return nil
+        }
 
         if provider == .opencode {
             return makePlan(executable: binaryPath, arguments: ["upgrade"])
@@ -160,6 +178,67 @@ public struct BinaryUpdater: Sendable {
         return (kind, String(path[nameRange]))
     }
 
+    public static func isMiseManaged(binaryPath: String, realPath: String) -> Bool {
+        [normalize(binaryPath), normalize(realPath)].contains { path in
+            path.contains("/mise/installs/") || path.contains("/mise/shims/")
+        }
+    }
+
+    /// Maps a mise shim or install path to the tool name `mise upgrade` expects.
+    /// Install directories flatten backend names (`npm:@openai/codex` becomes
+    /// `npm-openai-codex`), so the name comes from `mise ls`, not the path.
+    public static func miseOwnership(
+        binaryPath: String,
+        realPath: String,
+        environment: [String: String],
+        runner: ProcessRunner
+    ) -> MiseOwnership? {
+        // A shim is a symlink to the mise executable itself.
+        let executable = realPath.lastPathComponent == "mise" ? realPath : BinaryLocator.which("mise")
+        guard let executable else { return nil }
+        var env = environment
+        if env["PATH"] == nil {
+            env["PATH"] = BinaryLocator.shellPath()
+        }
+        var installedPath = realPath
+        if !normalize(realPath).contains("/mise/installs/") {
+            guard let result = try? runner.run(
+                executable: executable,
+                arguments: ["which", binaryPath.lastPathComponent],
+                environment: env,
+                timeout: 8,
+                workingDirectory: home,
+                mergeStandardError: false
+            ), result.exitCode == 0 else { return nil }
+            installedPath = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let result = try? runner.run(
+            executable: executable,
+            arguments: ["ls", "--json"],
+            environment: env,
+            timeout: 8,
+            workingDirectory: home,
+            mergeStandardError: false
+        ), result.exitCode == 0 else { return nil }
+        guard let tool = miseTool(listing: result.output, installedPath: installedPath) else { return nil }
+        return MiseOwnership(executable: executable, tool: tool)
+    }
+
+    public static func miseTool(listing: String, installedPath: String) -> String? {
+        guard let data = listing.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: [[String: Any]]]
+        else { return nil }
+        let target = URL(fileURLWithPath: installedPath).resolvingSymlinksInPath().path
+        for (tool, versions) in root.sorted(by: { $0.key < $1.key }) {
+            for version in versions {
+                guard let installPath = version["install_path"] as? String else { continue }
+                let prefix = URL(fileURLWithPath: installPath).resolvingSymlinksInPath().path
+                if target.hasPrefix(prefix + "/") { return tool }
+            }
+        }
+        return nil
+    }
+
     public static func compareVersions(_ lhs: String, _ rhs: String) -> Int {
         let left = numericParts(lhs)
         let right = numericParts(rhs)
@@ -178,12 +257,27 @@ public struct BinaryUpdater: Sendable {
         case cask
     }
 
+    public struct MiseOwnership: Sendable, Equatable {
+        public var executable: String
+        public var tool: String
+
+        public init(executable: String, tool: String) {
+            self.executable = executable
+            self.tool = tool
+        }
+    }
+
     private static func latestVersion(
         provider: ProviderKind,
         realPath: String,
+        mise: MiseOwnership?,
         environment: [String: String],
         runner: ProcessRunner
     ) -> String? {
+        // mise backends can lag npm; report what `mise upgrade` will install.
+        if let mise {
+            return miseLatest(mise, environment: environment, runner: runner)
+        }
         if let brew = homebrewOwnership(realPath: realPath),
            let brewPath = BinaryLocator.which("brew")
         {
@@ -193,6 +287,31 @@ public struct BinaryUpdater: Sendable {
             return LatestVersionCache.shared.npmLatest(pkg)
         }
         return nil
+    }
+
+    private static func miseLatest(
+        _ mise: MiseOwnership,
+        environment: [String: String],
+        runner: ProcessRunner
+    ) -> String? {
+        let cacheKey = "mise:\(mise.tool)"
+        if let cached = LatestVersionCache.shared.get(cacheKey) { return cached }
+        var env = environment
+        if env["PATH"] == nil {
+            env["PATH"] = BinaryLocator.shellPath()
+        }
+        let result = try? runner.run(
+            executable: mise.executable,
+            arguments: ["latest", mise.tool],
+            environment: env,
+            timeout: 8,
+            workingDirectory: home,
+            mergeStandardError: false
+        )
+        let output = result?.exitCode == 0 ? result?.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        let version = output?.isEmpty == false ? output : nil
+        LatestVersionCache.shared.set(cacheKey, version)
+        return version
     }
 
     private static func brewLatest(
@@ -224,6 +343,11 @@ public struct BinaryUpdater: Sendable {
         }
         LatestVersionCache.shared.set(cacheKey, version)
         return version
+    }
+
+    /// mise picks versions by directory; match the terminal probe, which runs in $HOME.
+    private static var home: URL {
+        FileManager.default.homeDirectoryForCurrentUser
     }
 
     private static func makePlan(executable: String, arguments: [String]) -> BinaryUpdatePlan {

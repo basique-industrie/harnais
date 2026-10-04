@@ -69,10 +69,13 @@ extension HarnaisRuntime {
         for peer in peers { updatingIDs.insert(peer.id) }
         errorMessage = nil
         let environment = IsolationEngine().spawnEnvironment(for: account)
+        let wrappers = service.wrappers
         Task {
             do {
-                _ = try await Task.detached {
-                    try BinaryUpdater().run(plan, environment: environment)
+                try await Task.detached {
+                    _ = try BinaryUpdater().run(plan, environment: environment)
+                    // Wrappers exec a resolved path, which a versioned install (mise) moves.
+                    try? wrappers.refreshAll(accounts: peers)
                 }.value
                 for peer in peers { updatingIDs.remove(peer.id) }
                 for peer in peers { checkConnection(peer) }
