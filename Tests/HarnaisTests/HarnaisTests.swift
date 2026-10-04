@@ -377,6 +377,51 @@ enum HarnaisSelfTests {
             realPath: "/usr/local/lib/node_modules/@anthropic-ai/claude-code/bin/claude"
         )
         expect(npmPlan?.command.contains("npm install -g --prefix /usr/local") == true, "npm global update command")
+        let miseInstall = "/Users/x/.local/share/mise/installs/codex/0.154.0/bin/codex"
+        expect(BinaryUpdater.isMiseManaged(binaryPath: miseInstall, realPath: miseInstall), "mise install detected")
+        expect(BinaryUpdater.isMiseManaged(
+            binaryPath: "/Users/x/.local/share/mise/shims/codex",
+            realPath: "/Users/x/.local/bin/mise"
+        ), "mise shim detected")
+        expect(!BinaryUpdater.isMiseManaged(
+            binaryPath: "/opt/homebrew/bin/codex",
+            realPath: "/opt/homebrew/Cellar/codex/0.154.0/bin/codex"
+        ), "homebrew is not mise")
+        let miseListing = """
+        {
+          "codex": [{"version": "0.154.0", "install_path": "/Users/x/.local/share/mise/installs/codex/0.154.0"}],
+          "npm:@anthropic-ai/claude-code": [{"version": "2.1.0", "install_path": "/Users/x/.local/share/mise/installs/npm-anthropic-ai-claude-code/2.1.0"}]
+        }
+        """
+        expectEqual(BinaryUpdater.miseTool(listing: miseListing, installedPath: miseInstall), "codex", "mise registry tool")
+        expectEqual(BinaryUpdater.miseTool(
+            listing: miseListing,
+            installedPath: "/Users/x/.local/share/mise/installs/npm-anthropic-ai-claude-code/2.1.0/bin/claude"
+        ), "npm:@anthropic-ai/claude-code", "mise backend tool")
+        expectEqual(BinaryUpdater.miseTool(
+            listing: miseListing,
+            installedPath: "/Users/x/.local/share/mise/installs/codex/0.154.0-beta/bin/codex"
+        ), nil, "mise install path prefix is a directory")
+        let misePlan = BinaryUpdater.plan(
+            provider: .codex,
+            binaryPath: miseInstall,
+            realPath: miseInstall,
+            mise: .init(executable: "/Users/x/.local/bin/mise", tool: "codex")
+        )
+        expectEqual(misePlan?.command, "mise upgrade --bump codex", "mise update command")
+        expectEqual(misePlan?.executable, "/Users/x/.local/bin/mise", "mise executable")
+        let opencodeMisePlan = BinaryUpdater.plan(
+            provider: .opencode,
+            binaryPath: "/Users/x/.local/share/mise/shims/opencode",
+            realPath: "/Users/x/.local/bin/mise",
+            mise: .init(executable: "/Users/x/.local/bin/mise", tool: "opencode")
+        )
+        expectEqual(opencodeMisePlan?.command, "mise upgrade --bump opencode", "mise wins over native upgrade")
+        expectEqual(BinaryUpdater.plan(
+            provider: .codex,
+            binaryPath: miseInstall,
+            realPath: miseInstall
+        ), nil, "unresolved mise install offers no self-update")
         expect(BinaryUpdater.compareVersions("0.153.4", "0.160.0") < 0, "semver behind")
         expect(BinaryUpdater.compareVersions("2.1.268", "2.1.268") == 0, "semver equal")
 
