@@ -15,12 +15,19 @@ public struct BinaryLocator: Sendable {
     }
 
     public static func resolve(_ provider: ProviderKind, override: String?) -> String? {
-        if let override, let path = which(override) { return path }
-        if let path = which(provider.defaultBinaryName) { return path }
+        if let override, let path = which(override) { return currentMiseInstall(path) }
+        if let path = which(provider.defaultBinaryName) { return currentMiseInstall(path) }
         if provider == .cursor {
-            return which("agent")
+            return which("agent").map(currentMiseInstall)
         }
         return nil
+    }
+
+    /// mise keeps old versions on disk, so a saved `mise/installs/<tool>/<version>`
+    /// path silently pins that version. Follow the version mise selects now.
+    public static func currentMiseInstall(_ path: String) -> String {
+        guard path.lowercased().contains("/mise/installs/") else { return path }
+        return PathIndex.shared.miseWhich(path) ?? path
     }
 
     public static func shellPath() -> String {
@@ -76,6 +83,38 @@ private final class PathIndex: @unchecked Sendable {
         }
         lock.lock()
         hits[tool] = found
+        lock.unlock()
+        return found
+    }
+
+    func miseWhich(_ path: String) -> String? {
+        let key = "mise-which:\(path)"
+        lock.lock()
+        if let cached = hits[key] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+        var found: String?
+        if let mise = which("mise") {
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            var env = ProcessInfo.processInfo.environment
+            env["PATH"] = pathString
+            let result = try? ProcessRunner().run(
+                executable: mise,
+                arguments: ["which", (path as NSString).lastPathComponent],
+                environment: env,
+                timeout: 8,
+                workingDirectory: home,
+                mergeStandardError: false
+            )
+            let output = result?.exitCode == 0 ? result?.output.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+            if let output, output.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: output) {
+                found = output
+            }
+        }
+        lock.lock()
+        hits[key] = found
         lock.unlock()
         return found
     }

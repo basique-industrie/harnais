@@ -75,6 +75,8 @@ extension HarnaisRuntime {
                     try BinaryUpdater().run(plan, environment: environment)
                 }.value
                 for peer in peers { updatingIDs.remove(peer.id) }
+                // Wrappers exec a resolved path, which a versioned install (mise) moves.
+                try? service.wrappers.refreshAll(accounts: peers)
                 for peer in peers { checkConnection(peer) }
                 if peers.isEmpty {
                     let connectionProbe = probe

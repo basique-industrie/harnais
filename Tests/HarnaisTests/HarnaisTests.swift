@@ -422,6 +422,11 @@ enum HarnaisSelfTests {
             binaryPath: miseInstall,
             realPath: miseInstall
         ), nil, "unresolved mise install offers no self-update")
+        expectEqual(
+            BinaryLocator.currentMiseInstall("/opt/homebrew/bin/codex"),
+            "/opt/homebrew/bin/codex",
+            "non-mise binaries keep their path"
+        )
         expect(BinaryUpdater.compareVersions("0.153.4", "0.160.0") < 0, "semver behind")
         expect(BinaryUpdater.compareVersions("2.1.268", "2.1.268") == 0, "semver equal")
 
