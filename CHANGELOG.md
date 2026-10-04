@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.3 - 2026-10-04
+
+- Update mise-managed command-line tools with `mise upgrade --bump`, and check mise for the latest version.
+- Follow the version mise currently selects for saved mise install paths, so Binaries no longer offers to switch the terminal back to an older version.
+- Refresh account terminal commands after a command-line update.
+
 ## 0.1.2 - 2026-09-29
 
 - Load app icons from the installed bundle before evaluating SwiftPM's build-machine fallback.

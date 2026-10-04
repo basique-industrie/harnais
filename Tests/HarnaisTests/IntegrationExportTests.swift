@@ -263,6 +263,8 @@ enum IntegrationExportTests {
             process.arguments = [probeURL.path]
             var env = ProcessInfo.processInfo.environment
             env["HOME"] = home.path
+            // Version-manager shims (mise, asdf) reject the fake HOME; Iles launches with a GUI PATH.
+            env["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"
             process.environment = env
             let out = Pipe()
             let err = Pipe()
