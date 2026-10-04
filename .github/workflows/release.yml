@@ -1,0 +1,101 @@
+# Publish a signed, notarized Harnais release for a tag.
+#
+# Harnais does not hold the Developer ID identity. Iles's release workflow
+# signs Harnais (product: harnais) on the trusted org Mac runner, behind
+# Iles's `release` environment, and keeps the result as the Harnais-notarized
+# artifact. This workflow starts that run, waits for it, verifies the
+# artifact and publishes it here, so a pushed tag needs no manual steps
+# beyond any approval the Iles environment requires.
+#
+# ILES_RELEASE_TOKEN: a fine-grained token for basique-industrie/iles with
+# Actions read and write, to dispatch the run and download its artifact.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The existing tag to release
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'basique-industrie/harnais'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    timeout-minutes: 120
+    env:
+      TAG: ${{ inputs.tag || github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Check the tag matches the app version
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import plistlib; print(plistlib.load(open("Sources/HarnaisCore/Info.plist", "rb"))["CFBundleShortVersionString"])')"
+          [[ "$TAG" == "v$version" ]] || { echo "Tag $TAG does not match CFBundleShortVersionString $version." >&2; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "Release $TAG already exists." >&2
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Sign and notarize in Iles
+        env:
+          GH_TOKEN: ${{ secrets.ILES_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Set the ILES_RELEASE_TOKEN secret." >&2; exit 1; }
+          run_id="$(gh api repos/basique-industrie/iles/actions/workflows/release.yml/dispatches \
+            -f ref=main -f 'inputs[product]=harnais' -f "inputs[tag]=$TAG" \
+            --jq .workflow_run_id)"
+          run_url="https://github.com/basique-industrie/iles/actions/runs/$run_id"
+          echo "ILES_RUN_ID=$run_id" >> "$GITHUB_ENV"
+          echo "Signing run: $run_url"
+          echo "Signing run: [$run_url]($run_url) (approve the \`release\` environment there if asked)" >> "$GITHUB_STEP_SUMMARY"
+          gh run watch "$run_id" -R basique-industrie/iles --interval 30 --exit-status > /dev/null
+
+      - name: Download and verify the notarized app
+        env:
+          GH_TOKEN: ${{ secrets.ILES_RELEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh run download "$ILES_RUN_ID" -R basique-industrie/iles -n Harnais-notarized -D dist
+          archive="Harnais-$VERSION-arm64.zip"
+          test -f "dist/$archive" && test -f "dist/$archive.sha256"
+          (cd dist && shasum -a 256 -c "$archive.sha256")
+          echo "ARCHIVE=dist/$archive" >> "$GITHUB_ENV"
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(awk -v heading="## $VERSION " '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md)"
+          [[ -n "${notes//[[:space:]]/}" ]] || { echo "CHANGELOG.md has no ## $VERSION section." >&2; exit 1; }
+          printf 'Signed and notarized macOS app for Apple silicon. Requires macOS 26 or later.\n%s\n' "$notes" > "$RUNNER_TEMP/notes.md"
+          flags=(--title "Harnais $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag)
+          # A dash is a prerelease channel (alpha/beta/rc). Do not mark it latest.
+          if [[ "$VERSION" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$TAG" "${flags[@]}" "$ARCHIVE" "$ARCHIVE.sha256"
