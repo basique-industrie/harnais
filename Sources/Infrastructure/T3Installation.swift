@@ -76,4 +76,10 @@ public struct T3Installation: Sendable {
     public var signsInToCursorSeparately: Bool {
         builds.contains(where: \.usesCursorSDK)
     }
+
+    /// Shared settings must retain CLI isolation if any installed build needs it.
+    /// With no known build, keep the compatible CLI export until T3 is detected.
+    public var usesOnlyCursorSDK: Bool {
+        !builds.isEmpty && builds.allSatisfy(\.usesCursorSDK)
+    }
 }

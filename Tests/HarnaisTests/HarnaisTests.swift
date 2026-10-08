@@ -66,6 +66,7 @@ enum HarnaisSelfTests {
         try SkillLibraryTests.run(root: root, expect: expect)
         try SkillPresentationTests.run(root: root, expect: expect)
         try T3SyncSafetyTests.run(root: root, expect: expect)
+        try T3CursorSDKTests.run(root: root, expect: expect)
         try CodexWeekTests.run(root: root, expect: expect)
         try TerminalCLITests.run(root: root, expect: expect)
         try OpenCodeTests.run(root: root, expect: expect)

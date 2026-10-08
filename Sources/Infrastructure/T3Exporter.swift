@@ -38,30 +38,38 @@ public struct T3EnvironmentVariable: Codable, Sendable, Equatable {
 public struct T3Exporter: Sendable {
     public var settingsURLs: [URL]
     public var homeDirectory: URL
+    /// True only when every detected T3 build uses its own Cursor SDK login.
+    public var cursorUsesSDK: Bool
 
     /// Packaged T3 Code writes `~/.t3/userdata/settings.json`. Older guesses
     /// used Application Support; T3 Code Dev uses `~/.t3/dev`.
     public init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        environment: [String: String] = ProcessInfo.processInfo.environment
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        cursorUsesSDK: Bool? = nil
     ) {
         self.homeDirectory = homeDirectory
+        self.cursorUsesSDK = cursorUsesSDK ?? T3Installation.installed().usesOnlyCursorSDK
         settingsURLs = Self.existingSettingsURLs(home: homeDirectory, environment: environment)
     }
 
     public init(
         settingsURL: URL,
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        cursorUsesSDK: Bool = false
     ) {
         self.homeDirectory = homeDirectory
+        self.cursorUsesSDK = cursorUsesSDK
         settingsURLs = [settingsURL]
     }
 
     public init(
         settingsURLs: [URL],
-        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
+        cursorUsesSDK: Bool = false
     ) {
         self.homeDirectory = homeDirectory
+        self.cursorUsesSDK = cursorUsesSDK
         self.settingsURLs = settingsURLs
     }
 
@@ -120,6 +128,12 @@ public struct T3Exporter: Sendable {
     }
 
     public func instance(for account: Account) -> T3ProviderInstance {
+        if account.provider == .cursor && cursorUsesSDK {
+            // The stable instance ID owns T3's SDK credentials. A CLI home or
+            // cursor-agent binary cannot select that account in SDK builds.
+            return T3ProviderInstance(driver: account.provider.t3Driver,
+                                      displayName: "\(account.provider.displayName) \(account.label)")
+        }
         var config: [String: String] = [:]
         if let binary = BinaryLocator.resolve(account.provider, override: account.binaryPath) {
             config["binaryPath"] = binary
@@ -331,11 +345,19 @@ public struct T3Exporter: Sendable {
             for (key, value) in proposed.config { config[key] = value }
             // A removed shadow must not keep routing this profile to an old login.
             if account.provider == .codex { config["shadowHomePath"] = account.shadowHomePath }
+            if account.provider == .cursor && cursorUsesSDK { config["binaryPath"] = nil }
             existing["config"] = config
             var environment = existing["environment"] as? [[String: Any]] ?? []
             let desiredEnvironment = desired["environment"] as? [[String: Any]] ?? []
             let names = Set(desiredEnvironment.compactMap { $0["name"] as? String })
             environment.removeAll { names.contains($0["name"] as? String ?? "") }
+            if account.provider == .cursor && cursorUsesSDK {
+                // Remove legacy fields previously written by Harnais while
+                // preserving T3-owned API keys, model settings and extensions.
+                environment.removeAll {
+                    ["CURSOR_CONFIG_DIR", "AGENT_CLI_CREDENTIAL_STORE"].contains($0["name"] as? String ?? "")
+                }
+            }
             environment.append(contentsOf: desiredEnvironment)
             if !environment.isEmpty || existing["environment"] != nil { existing["environment"] = environment }
             if changes.enable.contains(account.t3InstanceID) { existing["enabled"] = true }
@@ -359,6 +381,9 @@ public struct T3Exporter: Sendable {
             return false
         }
         if instances[account.t3InstanceID] != nil { return true }
+        // Matching CLI paths says nothing about the SDK account signed in to a
+        // different T3 instance. Always use this profile's stable Harnais ID.
+        if account.provider == .cursor && cursorUsesSDK { return true }
         let proposed = isolationIdentity(for: account)
         for (key, value) in instances where !key.hasPrefix("harnais_") {
             guard let object = value as? [String: Any],

@@ -156,6 +156,21 @@ public struct HarnaisRootView: View {
                         deletingConnection = nil
                     }
                 )
+            } else if let account = runtime.t3SignInPrompt {
+                HarnaisConfirmDialog(
+                    title: "Sign in to Cursor in T3 Code?",
+                    message: "\(account.label) was added to T3 Code. T3 keeps its own Cursor login; choose the account you want this profile to use.",
+                    confirmTitle: "Sign in…",
+                    cancelTitle: "Later",
+                    confirmRole: nil,
+                    onCancel: { runtime.dismissT3SignInPrompt(account) },
+                    onConfirm: {
+                        runtime.dismissT3SignInPrompt(account)
+                        runtime.select(account)
+                        page = .account
+                        runtime.signInToT3(account)
+                    }
+                )
             }
         }
         .onAppear {
@@ -184,6 +199,8 @@ public struct HarnaisRootView: View {
                 deletingAccount = nil
             } else if deletingConnection != nil {
                 deletingConnection = nil
+            } else if let account = runtime.t3SignInPrompt {
+                runtime.dismissT3SignInPrompt(account)
             } else if page != .overview, !Self.isEditingText {
                 page = .overview
             }

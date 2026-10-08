@@ -31,6 +31,9 @@ extension HarnaisRuntime {
         t3SyncTask = Task {
             await previous?.value
             defer { pendingT3Syncs -= 1 }
+            let addedCursorIDs = accounts.filter {
+                t3SignsInSeparately(for: $0) && t3Placement(for: $0) == .notMerged
+            }.map(\.id)
             do {
                 _ = try await Task.detached(priority: .userInitiated) {
                     try await T3Exporter().sync(accounts: accounts, changes: changes)
@@ -38,6 +41,14 @@ extension HarnaisRuntime {
                 if announce {
                     errorMessage = nil
                     presentSuccess(Self.t3UpdatedMessage)
+                }
+                refreshT3State()
+                for id in addedCursorIDs where !pendingT3SignInPrompts.contains(id) {
+                    if let account = self.accounts.first(where: { $0.id == id }),
+                       t3Placement(for: account) == .merged,
+                       t3Status(for: account)?.auth != .authenticated {
+                        pendingT3SignInPrompts.append(id)
+                    }
                 }
             } catch {
                 if announce { successMessage = nil }
@@ -86,6 +97,21 @@ extension HarnaisRuntime {
 
     public func t3SignIn(for account: Account) -> T3AuthState? {
         t3SignIns[account.id]
+    }
+
+    /// Offer one SDK sign-in at a time, including profiles added by automatic sync.
+    public var t3SignInPrompt: Account? {
+        guard t3SignIns.isEmpty else { return nil }
+        return pendingT3SignInPrompts.lazy.compactMap { id in
+            self.accounts.first { $0.id == id }
+        }.first {
+            t3SignsInSeparately(for: $0) && t3Placement(for: $0) == .merged
+                && t3Status(for: $0)?.auth != .authenticated
+        }
+    }
+
+    public func dismissT3SignInPrompt(_ account: Account) {
+        pendingT3SignInPrompts.removeAll { $0 == account.id }
     }
 
     public func t3Snippet(for account: Account) -> String {
@@ -169,6 +195,10 @@ extension HarnaisRuntime {
                 .max { ($0.checkedAt ?? .distantPast) < ($1.checkedAt ?? .distantPast) }
         }
         t3Statuses = statuses
+        pendingT3SignInPrompts.removeAll { id in
+            guard let account = accounts.first(where: { $0.id == id }) else { return true }
+            return t3Placement(for: account) != .merged || t3Status(for: account)?.auth == .authenticated
+        }
         watchT3(settingsURLs: candidates, cacheDirectories: reader.cacheDirectories, instanceIDs: instanceIDs)
     }
 
