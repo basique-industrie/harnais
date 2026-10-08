@@ -48,9 +48,20 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 release.release_for_tag("v1.2.3")
 
-    def test_release_lookup_paginates(self):
-        with patch.object(release, "gh", return_value=json.dumps([[{"tag_name": "v2.0.0"}], [{"tag_name": "v1.2.3"}]])):
-            self.assertEqual(release.release_for_tag("v1.2.3")["tag_name"], "v1.2.3")
+    def test_draft_lookup_uses_pending_tag_then_exact_release_id(self):
+        draft = {"id": 123, "tag_name": "v1.2.3", "draft": True}
+        data = {"data": {"repository": {"release": {"databaseId": 123}}}}
+        with patch.object(release, "gh", side_effect=[json.dumps(data), json.dumps(draft)]) as gh:
+            self.assertEqual(release.release_for_tag("v1.2.3"), draft)
+        self.assertEqual(gh.call_args_list[0].args[:2], ("api", "graphql"))
+        self.assertIn("tag=v1.2.3", gh.call_args_list[0].args)
+        self.assertEqual(gh.call_args_list[1].args, ("api", f"repos/{release.REPOSITORY}/releases/123"))
+
+    def test_null_release_means_absent(self):
+        data = {"data": {"repository": {"release": None}}}
+        with patch.object(release, "gh", return_value=json.dumps(data)) as gh:
+            self.assertIsNone(release.release_for_tag("v1.2.3"))
+        gh.assert_called_once()
 
     def test_published_release_is_verified_without_mutation(self):
         existing = {"draft": False}

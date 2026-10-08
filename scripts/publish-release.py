@@ -54,10 +54,23 @@ def metadata(tag):
 
 
 def release_for_tag(tag):
-    # A failing API request is never treated as 'release absent'. Listing also
-    # avoids depending on localized gh stderr to distinguish a 404 from a 403.
-    pages = json.loads(gh("api", f"repos/{REPOSITORY}/releases?per_page=100", "--paginate", "--slurp"))
-    return next((release for page in pages for release in page if release["tag_name"] == tag), None)
+    # Like gh's own draft lookup, resolve the pending tag through GraphQL and
+    # fetch the exact REST release by ID. The REST tag endpoint finds published
+    # releases only; listing drafts is not a reliable read-after-write lookup.
+    # An API failure must propagate, never be treated as 'release absent'.
+    owner, name = REPOSITORY.split("/")
+    query = """query($owner: String!, $name: String!, $tag: String!) {
+        repository(owner: $owner, name: $name) {
+            release(tagName: $tag) { databaseId }
+        }
+    }"""
+    data = json.loads(gh("api", "graphql", "--raw-field", f"query={query}",
+                         "--raw-field", f"owner={owner}", "--raw-field", f"name={name}",
+                         "--raw-field", f"tag={tag}"))
+    release = data["data"]["repository"]["release"]
+    if release is None:
+        return None
+    return json.loads(gh("api", f"repos/{REPOSITORY}/releases/{release['databaseId']}"))
 
 
 def artifacts(version, directory):
