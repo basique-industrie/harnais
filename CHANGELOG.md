@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-10-08
 
 - Find T3 Code Dev settings at `~/.t3/dev/settings.json`.
 - Tell Cursor users to sign in inside T3 when T3 Code runs Cursor through its SDK (Nightly 0.0.46+).
