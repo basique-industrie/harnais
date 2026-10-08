@@ -25,6 +25,11 @@ def run(*args):
     return result.stdout.strip()
 
 
+def decode_key(value):
+    # Both macOS and Linux base64 exports may contain line wrapping.
+    return base64.b64decode("".join(value.split()), validate=True)
+
+
 def prepare(root):
     missing = [name for name in REQUIRED if not os.environ.get(name)]
     if missing:
@@ -47,14 +52,18 @@ def prepare(root):
     p12 = root / "certificate.p12"
     p8 = root / "notary.p8"
     try:
-        p12.write_bytes(base64.b64decode(os.environ[REQUIRED[0]], validate=True))
+        p12.write_bytes(decode_key(os.environ[REQUIRED[0]]))
         run("security", "import", str(p12), "-k", str(keychain),
             "-P", os.environ[REQUIRED[1]], "-T", "/usr/bin/codesign", "-f", "pkcs12")
         for certificate in sorted(Path("packaging/certs").glob("*.cer")):
-            run("security", "import", str(certificate), "-k", str(keychain), "-t", "cert")
+            # Some PKCS#12 exports already contain the public intermediate CA.
+            imported = subprocess.run(["security", "import", str(certificate), "-k", str(keychain), "-t", "cert"],
+                                      capture_output=True, text=True)
+            if imported.returncode and "already exists" not in imported.stderr:
+                raise RuntimeError(f"Could not import public certificate {certificate.name}.")
         run("security", "set-key-partition-list", "-S", "apple-tool:,apple:,codesign:",
             "-s", "-k", password, str(keychain))
-        p8.write_bytes(base64.b64decode(os.environ["APPLE_NOTARY_KEY_P8"], validate=True))
+        p8.write_bytes(decode_key(os.environ["APPLE_NOTARY_KEY_P8"]))
         run("xcrun", "notarytool", "store-credentials", "harnais-release",
             "--key", str(p8), "--key-id", os.environ["APPLE_NOTARY_KEY_ID"],
             "--issuer", os.environ["APPLE_NOTARY_KEY_ISSUER"], "--keychain", str(keychain))

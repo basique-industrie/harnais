@@ -105,6 +105,11 @@ class ReleaseTests(unittest.TestCase):
                 keychain.run("security", "import", "-P", "secret password")
         self.assertNotIn("secret", str(error.exception))
 
+    def test_signing_keys_accept_wrapped_base64(self):
+        self.assertEqual(keychain.decode_key("Y2Vy\ndGlm\naWNhdGU=\n"), b"certificate")
+        with self.assertRaises(ValueError):
+            keychain.decode_key("not a certificate!")
+
     def test_transfer_rejects_wrong_recipient_or_missing_secret(self):
         key = {"key_id": "1", "key": "public-key"}
         data = dict(key, repository=transfer.REPOSITORY, environment="release",
