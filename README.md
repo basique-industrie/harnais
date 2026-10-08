@@ -99,10 +99,12 @@ The product OAuth registration catalog is injected by the protected release buil
 and excluded from source control. When building from source, use Advanced custom
 app settings for your own registrations. Existing saved connections still work.
 
-To release, bump `CFBundleShortVersionString` in `Sources/HarnaisCore/Info.plist`,
+To release, bump the version and build in `Sources/HarnaisCore/Info.plist`,
 add a matching `## X.Y.Z` section to `CHANGELOG.md`, and push a `vX.Y.Z` tag.
-The Release workflow has Iles's protected release job sign and notarize the
-app, then publishes the zip and checksum here.
+Harnais's Release workflow builds, signs, notarizes and publishes the zip and
+checksum after approval of its protected `release` environment. It uses the
+repository's automatic GitHub token; no personal token is needed.
+See [the release guide](docs/RELEASE.md) for setup, validation and retries with `gh`.
 
 ## CLI
 
