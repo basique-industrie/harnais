@@ -11,21 +11,20 @@ public struct T3RunningServer: Equatable, Sendable {
 
 extension HarnaisRuntime {
     public func applyT3() {
-        syncT3(accounts: accounts, announce: true)
+        previewT3(accounts: accounts)
     }
 
     /// Adds or updates one profile from its Settings tab. Adding switches back on an entry T3 kept
     /// turned off, e.g. from a removed profile with the same name.
     public func applyT3(_ account: Account) {
         let adding = t3Placement(for: account) == .notMerged
-        syncT3(accounts: accounts,
-               changes: T3InstanceChanges(enable: adding ? [account.t3InstanceID] : []),
-               announce: true)
+        previewT3(accounts: accounts,
+                  changes: T3InstanceChanges(enable: adding ? [account.t3InstanceID] : []))
     }
 
     /// Applies in the background: the running T3 server makes the change when it can, otherwise
     /// Harnais edits the settings file. Syncs run one after another.
-    func syncT3(accounts: [Account], changes: T3InstanceChanges = T3InstanceChanges(), announce: Bool) {
+    func syncT3(accounts: [Account], changes: T3InstanceChanges = T3InstanceChanges(), announce: Bool, preview: T3SyncPreview? = nil) {
         let previous = t3SyncTask
         pendingT3Syncs += 1
         t3SyncTask = Task {
@@ -35,9 +34,16 @@ extension HarnaisRuntime {
                 t3SignsInSeparately(for: $0) && t3Placement(for: $0) == .notMerged
             }.map(\.id)
             do {
+                if preview != nil {
+                    guard accounts.allSatisfy({ planned in self.accounts.contains(planned) }) else {
+                        throw HarnaisError.processFailed("An account changed since this preview. Preview again before applying.")
+                    }
+                }
                 _ = try await Task.detached(priority: .userInitiated) {
-                    try await T3Exporter().sync(accounts: accounts, changes: changes)
+                    if let preview { return try await T3Exporter().apply(preview) }
+                    return try await T3Exporter().sync(accounts: accounts, changes: changes)
                 }.value
+                t3Preview = nil
                 if announce {
                     errorMessage = nil
                     presentSuccess(Self.t3UpdatedMessage)
@@ -57,6 +63,7 @@ extension HarnaisRuntime {
                     : "Could not update T3 Code: \(error.localizedDescription)"
             }
             refreshT3State()
+            refreshSyncHistory()
         }
     }
 

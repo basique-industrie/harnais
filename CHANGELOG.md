@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-10-08
+
+- Added Account health for CLI and sign-in checks, account command routing, T3 identity and sync, quota freshness, and connection configuration.
+- Added local sync history, previews before manual T3 sync, and conflict-aware undo of managed settings. Undo disables newly added profiles while retaining conversation IDs.
+- Added a redacted `harnais doctor` diagnostic report and account-command repair. Credentials and custom environment values are excluded from activity history.
+
 ## 0.3.0 - 2026-10-08
 
 - Check for signed Harnais updates from About or the application menu, with an optional automatic check and a verified update feed. Harnais Dev remains a separate development app.

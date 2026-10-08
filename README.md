@@ -54,6 +54,7 @@ from user credentials; never commit `~/.harnais/oauth-clients.json` or tokens.
 - Wrappers in `~/.harnais/bin` (`harnais`, `claude-work`, `codex-personal`, `agent-work`)
 - `~/.harnais/quotas.json` for Iles
 - Drive / Slack / Grafana / Atlassian connections shared across harnesses
+- Unified account health, redacted diagnostics, T3 sync previews, local history and conflict-aware undo. See [diagnosis and recovery](docs/DIAGNOSIS-AND-RECOVERY.md).
 - Account colors, with an optional matching accent in T3 Code.
 - Signed in-app updates in the shipped app; check manually from About or the app menu.
 - Optional merge of extra accounts into T3 Code `providerInstances` (vendor defaults map to T3's built-in slots). When T3 is open, Harnais updates it through T3 itself. Profiles already in T3 stay updated.

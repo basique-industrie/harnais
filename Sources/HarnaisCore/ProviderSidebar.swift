@@ -129,6 +129,10 @@ struct ProviderSidebar: View {
                 shortcutHint: "⌘4",
                 action: { page = .skills }
             )
+            SidebarNavRow(glyph: .lifeBuoy, title: "Account health", selected: page == .health,
+                          action: { page = .health })
+            SidebarNavRow(glyph: .blocks, title: "Sync history", selected: page == .syncHistory,
+                          action: { page = .syncHistory })
         }
         .padding(.horizontal, 6)
         .padding(.bottom, 10)

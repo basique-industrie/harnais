@@ -52,7 +52,7 @@ struct SettingsPageView: View {
                 } else if runtime.didUpdateT3 {
                     SettingsCheck(title: HarnaisRuntime.t3UpdatedMessage)
                 } else {
-                    HarnaisButton(title: "Sync extra profiles") { runtime.applyT3() }
+                    HarnaisButton(title: "Preview sync") { runtime.applyT3() }
                 }
             }
             ForEach(runtime.t3Builds) { build in

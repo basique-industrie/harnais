@@ -31,6 +31,9 @@ public final class HarnaisRuntime {
     public var usage = UsagePresentation()
     public internal(set) var settings = HarnaisSettingsDocument()
     public internal(set) var installedTerminals: [InstalledTerminal] = []
+    public var t3Preview: T3SyncPreview?
+    public internal(set) var syncHistory: [T3SyncRecord] = []
+    public internal(set) var syncHistoryError: String?
     public internal(set) var t3Placements: [UUID: T3AccountPlacement] = [:]
     public internal(set) var t3SignsInToCursorSeparately = false
     /// What T3 last reported per provider instance, keyed by instance ID.
