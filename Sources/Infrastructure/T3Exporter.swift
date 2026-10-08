@@ -40,7 +40,7 @@ public struct T3Exporter: Sendable {
     public var homeDirectory: URL
 
     /// Packaged T3 Code writes `~/.t3/userdata/settings.json`. Older guesses
-    /// used Application Support; T3 Code Dev may use `~/.t3/dev/userdata`.
+    /// used Application Support; T3 Code Dev uses `~/.t3/dev`.
     public init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -98,7 +98,6 @@ public struct T3Exporter: Sendable {
         add(
             home.appendingPathComponent(".t3", isDirectory: true)
                 .appendingPathComponent("dev", isDirectory: true)
-                .appendingPathComponent("userdata", isDirectory: true)
                 .appendingPathComponent("settings.json")
         )
         add(
@@ -176,27 +175,87 @@ public struct T3Exporter: Sendable {
         try apply(accounts: accounts, to: [settingsURL])
     }
 
+    /// Applies through the running T3 server when there is one, so T3 makes the change itself and
+    /// stores sensitive values in its secret store. Falls back to editing the file when T3 is closed
+    /// or its build cannot issue a session.
+    @discardableResult
+    public func sync(accounts: [Account], changes: T3InstanceChanges = T3InstanceChanges()) async throws -> T3SyncRoute {
+        let targets = settingsURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
+        guard !targets.isEmpty else { throw HarnaisError.t3SettingsMissing }
+        var fileTargets: [URL] = []
+        var route = T3SyncRoute.file
+        for url in targets {
+            // T3 saves every change to this file, so a no-op merge needs no session.
+            let current = try Data(contentsOf: url)
+            if try mergedSettings(accounts: accounts, data: current, changes: changes) == current { continue }
+            guard let server = T3Server.running(settingsURL: url) else {
+                fileTargets.append(url)
+                continue
+            }
+            do {
+                try await apply(accounts: accounts, changes: changes, through: server, settingsURL: url)
+                route = .server
+            } catch T3ServerError.unavailable {
+                fileTargets.append(url)
+            }
+        }
+        if !fileTargets.isEmpty {
+            try apply(accounts: accounts, changes: changes, to: fileTargets)
+        }
+        return route
+    }
+
+    private func apply(accounts: [Account], changes: T3InstanceChanges, through server: T3Server, settingsURL: URL) async throws {
+        try await server.withSession { session in
+            let connection = session.connect()
+            defer { Task { await connection.close() } }
+            let settings = try await connection.request("server.getSettings")
+            guard let root = try? JSONSerialization.jsonObject(with: settings) as? [String: Any],
+                  root["providerInstances"] == nil || root["providerInstances"] is [String: Any]
+            else { throw T3ServerError.unavailable("T3 Code returned settings Harnais cannot read.") }
+            let current = root["providerInstances"] as? [String: Any] ?? [:]
+            let merged = try mergedProviderInstances(accounts: accounts, into: current, changes: changes)
+            let changed = merged.keys.sorted().filter { id in
+                guard let after = merged[id] as? [String: Any] else { return false }
+                return (current[id] as? NSDictionary)?.isEqual(to: after) != true
+            }
+            guard !changed.isEmpty else { return }
+            if let original = try? Data(contentsOf: settingsURL) {
+                try backUp(original, of: settingsURL)
+            }
+            for (index, id) in changed.enumerated() {
+                let mutation: [String: Any] = [
+                    "patch": [String: Any](),
+                    "providerInstanceMutation": ["operation": "upsert", "instanceId": id, "instance": merged[id] ?? [:]],
+                ]
+                do {
+                    _ = try await connection.request("server.updateSettings",
+                                                     payload: JSONSerialization.data(withJSONObject: mutation))
+                } catch T3ServerError.unavailable(let message) where index > 0 {
+                    // Earlier entries already changed; editing the file now could undo T3's own writes.
+                    throw T3ServerError.rejected(message)
+                }
+            }
+        }
+    }
+
     private func apply(accounts: [Account], to targets: [URL]) throws {
+        try apply(accounts: accounts, changes: T3InstanceChanges(), to: targets)
+    }
+
+    private func apply(accounts: [Account], changes: T3InstanceChanges, to targets: [URL]) throws {
         // Validate every destination before touching any of them.
-        let changes = try targets.map { url in
+        let writes = try targets.map { url in
             guard FileManager.default.fileExists(atPath: url.path) else { throw HarnaisError.t3SettingsMissing }
             let original = try Data(contentsOf: url)
-            return (url: url, original: original, output: try mergedSettings(accounts: accounts, data: original))
+            return (url: url, original: original, output: try mergedSettings(accounts: accounts, data: original, changes: changes))
         }.filter { $0.original != $0.output }
-        for change in changes {
-            let directory = change.url.deletingLastPathComponent().appendingPathComponent("harnais-backups")
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
-                                                   attributes: [.posixPermissions: 0o700])
-            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
-            let backup = directory.appendingPathComponent("settings-\(UUID().uuidString).json")
-            guard FileManager.default.createFile(atPath: backup.path, contents: change.original,
-                                                 attributes: [.posixPermissions: 0o600]) else {
-                throw HarnaisError.processFailed("Could not back up T3 Code settings. Sync was cancelled.")
-            }
+        for change in writes {
+            try backUp(change.original, of: change.url)
         }
         var written: [(url: URL, original: Data, output: Data)] = []
         do {
-            for change in changes {
+            for change in writes {
                 guard try Data(contentsOf: change.url) == change.original else {
                     throw HarnaisError.processFailed("T3 Code settings changed during sync. Try again.")
                 }
@@ -212,12 +271,43 @@ public struct T3Exporter: Sendable {
         }
     }
 
+    private func backUp(_ original: Data, of url: URL) throws {
+        let directory = url.deletingLastPathComponent().appendingPathComponent("harnais-backups")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                               attributes: [.posixPermissions: 0o700])
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        let backup = directory.appendingPathComponent("settings-\(UUID().uuidString).json")
+        guard FileManager.default.createFile(atPath: backup.path, contents: original,
+                                             attributes: [.posixPermissions: 0o600]) else {
+            throw HarnaisError.processFailed("Could not back up T3 Code settings. Sync was cancelled.")
+        }
+    }
+
     /// Pure preview, also used to verify sync against copies of real settings.
-    public func mergedSettings(accounts: [Account], data: Data) throws -> Data {
+    public func mergedSettings(accounts: [Account], data: Data, changes: T3InstanceChanges = T3InstanceChanges()) throws -> Data {
         guard var root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               root["providerInstances"] == nil || root["providerInstances"] is [String: Any]
         else { throw HarnaisError.t3SettingsInvalid }
-        var instances = root["providerInstances"] as? [String: Any] ?? [:]
+        let instances = try mergedProviderInstances(
+            accounts: accounts,
+            into: root["providerInstances"] as? [String: Any] ?? [:],
+            changes: changes
+        )
+        // Keep all existing IDs, including retired profiles referenced by conversations.
+        root["providerInstances"] = instances
+        if let original = try? JSONSerialization.jsonObject(with: data) as? NSDictionary,
+           original.isEqual(to: root) { return data }
+        return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+    }
+
+    /// The `providerInstances` map after merging `accounts`. Shared by the file and server paths:
+    /// existing entries keep enabled flags, model choices, launch options, secrets and unknown fields.
+    public func mergedProviderInstances(
+        accounts: [Account],
+        into existingInstances: [String: Any],
+        changes: T3InstanceChanges = T3InstanceChanges()
+    ) throws -> [String: Any] {
+        var instances = existingInstances
         let ids = accounts.map(\.t3InstanceID)
         guard Set(ids).count == ids.count else {
             throw HarnaisError.processFailed("Two Harnais profiles have the same T3 Code identifier. Sync was cancelled.")
@@ -248,14 +338,16 @@ public struct T3Exporter: Sendable {
             environment.removeAll { names.contains($0["name"] as? String ?? "") }
             environment.append(contentsOf: desiredEnvironment)
             if !environment.isEmpty || existing["environment"] != nil { existing["environment"] = environment }
-            // Preserve enabled flags, model choices, launch options, secrets and unknown fields.
+            if changes.enable.contains(account.t3InstanceID) { existing["enabled"] = true }
             instances[account.t3InstanceID] = existing
         }
-        // Keep all existing IDs, including retired profiles referenced by conversations.
-        root["providerInstances"] = instances
-        if let original = try? JSONSerialization.jsonObject(with: data) as? NSDictionary,
-           original.isEqual(to: root) { return data }
-        return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys])
+        // Only Harnais entries are switched off; T3's own providers are never touched.
+        for id in changes.disable where id.hasPrefix("harnais_") && !ids.contains(id) {
+            guard var existing = instances[id] as? [String: Any] else { continue }
+            existing["enabled"] = false
+            instances[id] = existing
+        }
+        return instances
     }
 
     /// T3 already shows a built-in slot for each driver (`claudeAgent`, `codex`,
@@ -280,6 +372,25 @@ public struct T3Exporter: Sendable {
     }
 }
 
+public enum T3SyncRoute: Sendable, Equatable {
+    /// The running T3 server made the change.
+    case server
+    /// Harnais edited the settings file; T3 was closed or could not issue a session.
+    case file
+}
+
+public struct T3InstanceChanges: Sendable, Equatable {
+    /// Harnais entries to switch back on, e.g. a profile added again under a removed profile's name.
+    public var enable: Set<String>
+    /// Harnais entries to switch off. Their IDs stay because conversations reference them.
+    public var disable: Set<String>
+
+    public init(enable: Set<String> = [], disable: Set<String> = []) {
+        self.enable = enable
+        self.disable = disable
+    }
+}
+
 private struct T3IsolationIdentity: Equatable {
     var driver: String
     var homePath: String
@@ -295,7 +406,9 @@ private extension T3Exporter {
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let instances = root["providerInstances"] as? [String: Any]
             else { continue }
-            for key in instances.keys where key.hasPrefix("harnais_") {
+            // A switched-off entry (e.g. left by a removed profile) does not count as in T3.
+            for (key, value) in instances where key.hasPrefix("harnais_")
+                && (value as? [String: Any])?["enabled"] as? Bool != false {
                 ids.insert(key)
             }
         }
@@ -326,6 +439,8 @@ private extension T3Exporter {
               let provider = provider(forDriver: driver)
         else { return nil }
         let config = object["config"] as? [String: Any] ?? [:]
+        // T3-managed ChatGPT accounts keep their tokens in T3, not in a Codex home.
+        if provider == .codex && config["setupMode"] as? String == "managed" { return nil }
         let environment = object["environment"] as? [[String: Any]] ?? []
         let openCodeData = environment.first { $0["name"] as? String == "XDG_DATA_HOME" }?["value"] as? String
         let cursorHome = environment.first { $0["name"] as? String == "CURSOR_CONFIG_DIR" }?["value"] as? String

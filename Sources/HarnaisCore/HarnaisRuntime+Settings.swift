@@ -29,29 +29,8 @@ extension HarnaisRuntime {
         NSWorkspace.shared.activateFileViewerSelecting([directory])
     }
 
-    public func applyT3() {
-        do {
-            try T3Exporter().apply(accounts: accounts)
-            errorMessage = nil
-            refreshT3Placements()
-            presentSuccess(Self.t3UpdatedMessage)
-        } catch {
-            successMessage = nil
-            errorMessage = error.localizedDescription
-        }
-    }
-
-    public func t3Placement(for account: Account) -> T3AccountPlacement {
-        t3Placements[account.id] ?? T3Exporter().placement(of: account)
-    }
-
     public var lastQuotaCapturedAt: Date? {
         feed.accounts.isEmpty ? nil : feed.capturedAt
-    }
-
-    func refreshT3Placements() {
-        let exporter = T3Exporter()
-        t3Placements = Dictionary(uniqueKeysWithValues: accounts.map { ($0.id, exporter.placement(of: $0)) })
     }
 
     func presentSuccess(_ message: String) {
@@ -64,10 +43,6 @@ extension HarnaisRuntime {
                 successMessage = nil
             }
         }
-    }
-
-    public func t3Snippet(for account: Account) -> String {
-        (try? T3Exporter().snippetJSON(for: account)) ?? "{}"
     }
 
     public func quotas(for account: Account) -> [FeedQuota] {

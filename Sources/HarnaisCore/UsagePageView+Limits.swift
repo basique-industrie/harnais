@@ -4,7 +4,7 @@ import SwiftUI
 extension UsagePageView {
     @ViewBuilder
     var limits: some View {
-        if runtime.accounts.isEmpty {
+        if runtime.accounts.isEmpty && runtime.t3ManagedAccounts.isEmpty {
             Text("Add an account to see limits.")
                 .font(HarnaisType.status)
                 .foregroundStyle(HarnaisPalette.label)
@@ -32,7 +32,7 @@ extension UsagePageView {
                         .font(.system(size: 12))
                         .foregroundStyle(HarnaisPalette.label)
                 }
-                if pool.provider == .codex {
+                if pool.provider == .codex && pool.accountCount > 0 {
                     HarnaisButton(title: "Manage weeks", prominence: .ghostMuted) { managingCodexWeeks = true }
                         .accessibilityLabel("Manage Codex weeks")
                 }
@@ -62,6 +62,9 @@ extension UsagePageView {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .strokeBorder(HarnaisPalette.hairline, lineWidth: 1)
                 }
+            }
+            if pool.provider == .codex && !runtime.t3ManagedAccounts.isEmpty {
+                t3ManagedLimits(now: now)
             }
         }
     }
@@ -105,7 +108,8 @@ extension UsagePageView {
     var limitPools: [ProviderLimitPool] {
         ProviderKind.allCases.compactMap { provider in
             let items = allUsageItems.filter { $0.account.provider == provider }
-            guard !items.isEmpty else { return nil }
+            let hasT3Accounts = provider == .codex && !runtime.t3ManagedAccounts.isEmpty
+            guard !items.isEmpty || hasT3Accounts else { return nil }
             var buckets: [String: [LimitPoolMember]] = [:]
             var skipped: [AccountUsageItem] = []
             for item in items {

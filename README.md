@@ -54,7 +54,8 @@ from user credentials; never commit `~/.harnais/oauth-clients.json` or tokens.
 - Wrappers in `~/.harnais/bin` (`harnais`, `claude-work`, `codex-personal`, `agent-work`)
 - `~/.harnais/quotas.json` for Iles
 - Drive / Slack / Grafana / Atlassian connections shared across harnesses
-- Optional merge of extra accounts into T3 Code `providerInstances` (default Claude / Codex / Cursor logins T3 already uses are not duplicated)
+- Optional merge of extra accounts into T3 Code `providerInstances` (default Claude / Codex / Cursor logins T3 already uses are not duplicated). When T3 is open, Harnais updates it through T3 itself. Profiles already in T3 stay updated.
+- T3 sign-in status for each account, one-click Cursor sign-in to T3, and T3-managed ChatGPT accounts in Usage
 
 ## Rules the UI never asks you to know
 
@@ -78,6 +79,9 @@ OpenCode quota and spend tracking are not available yet.
 - Codex defaults to a separate `CODEX_HOME`. An optional T3 shadow home
   keeps auth private while sharing Codex history.
 - Cursor second accounts use `CURSOR_CONFIG_DIR` and a file credential store.
+  T3 Code Nightly 0.0.46+ runs Cursor through its own SDK and ignores that
+  profile: use **T3 sign-in → Sign in…** on the account's Settings tab, or
+  sign in to each Cursor provider in T3 Settings → Providers.
 
 ## Build
 
