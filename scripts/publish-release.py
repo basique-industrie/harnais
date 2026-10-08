@@ -110,26 +110,31 @@ def publish(tag, version, commit, notes, files):
     if release is None:
         body = ("Signed and notarized macOS app for Apple silicon. Requires macOS 26 or later.\n\n"
                 + notes + f"\n\nSource commit: `{commit}`\n")
-        with tempfile.TemporaryDirectory(prefix="harnais-notes-") as directory:
-            path = Path(directory) / "notes.md"
-            path.write_text(body)
-            gh("release", "create", tag, "--repo", REPOSITORY, "--verify-tag", "--draft",
-               "--title", f"Harnais {version}", "--notes-file", str(path),
-               *(["--prerelease"] if "-" in version else []))
-        release = release_for_tag(tag)
-    if release is None:
-        raise ValueError("Draft release could not be read back.")
+        # Keep the existing-tag guard: the release API can otherwise create a
+        # missing tag. Use its response directly; a newly created draft may not
+        # yet appear in the repository's release listing.
+        gh("api", f"repos/{REPOSITORY}/git/ref/tags/{tag}")
+        release = json.loads(gh(
+            "api", "--method", "POST", f"repos/{REPOSITORY}/releases",
+            "--raw-field", f"tag_name={tag}",
+            "--raw-field", f"target_commitish={commit}",
+            "--raw-field", f"name=Harnais {version}",
+            "--raw-field", f"body={body}",
+            "--field", "draft=true",
+            "--field", "prerelease=" + str("-" in version).lower()))
     # Retry only a draft created by this publisher for this exact source commit.
     if f"Source commit: `{commit}`" not in (release.get("body") or ""):
         raise ValueError("Existing draft belongs to another publication; inspect it before retrying.")
+    endpoint = f"repos/{REPOSITORY}/releases/{release['id']}"
     # A rebuild has different signing timestamps. Replace both assets only in
     # our own unpublished draft, so a crash between uploads is recoverable.
     for path in files:
         gh("release", "upload", tag, str(path), "--repo", REPOSITORY, "--clobber")
-    release = release_for_tag(tag)
+    # Refresh this exact release rather than rediscovering it through a list.
+    release = json.loads(gh("api", endpoint))
     verify_remote_assets(tag, files, release)
-    gh("release", "edit", tag, "--repo", REPOSITORY, "--draft=false",
-       "--prerelease=" + str("-" in version).lower())
+    gh("api", "--method", "PATCH", endpoint, "--field", "draft=false",
+       "--field", "prerelease=" + str("-" in version).lower())
     print(f"Published https://github.com/{REPOSITORY}/releases/tag/{tag}")
 
 

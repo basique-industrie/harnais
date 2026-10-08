@@ -72,17 +72,63 @@ class ReleaseTests(unittest.TestCase):
             gh.assert_not_called()
 
     def test_partial_draft_is_repaired_before_publication(self):
-        draft = {"draft": True, "body": "Source commit: `abc`", "assets": [{"name": "a.zip"}]}
+        draft = {"id": 123, "draft": True, "body": "Source commit: `abc`", "assets": [{"name": "a.zip"}]}
         events = []
-        with patch.object(release, "release_for_tag", return_value=draft), patch.object(release, "verify_remote_assets", side_effect=lambda *args: events.append("verify")), patch.object(release, "gh", side_effect=lambda *args: events.append(args)):
+
+        def gh(*args):
+            events.append(args)
+            return json.dumps(draft)
+
+        with patch.object(release, "release_for_tag", return_value=draft) as lookup, patch.object(release, "verify_remote_assets", side_effect=lambda *args: events.append("verify")), patch.object(release, "gh", side_effect=gh):
             release.publish("v1.2.3", "1.2.3", "abc", "notes", [Path("a.zip"), Path("a.zip.sha256")])
+        lookup.assert_called_once()
         self.assertEqual([item[1] for item in events[:2]], ["upload", "upload"])
         self.assertIn("--clobber", events[0])
-        self.assertEqual(events[2], "verify")
-        self.assertIn("--draft=false", events[3])
+        self.assertEqual(events[2], ("api", f"repos/{release.REPOSITORY}/releases/123"))
+        self.assertEqual(events[3], "verify")
+        self.assertIn("PATCH", events[4])
+        self.assertIn("draft=false", events[4])
+
+    def test_new_draft_uses_creation_response_even_when_listing_is_empty(self):
+        draft = {"id": 123, "draft": True, "body": "Source commit: `abc`", "assets": []}
+        uploaded = dict(draft, assets=[{"name": "a.zip"}])
+        events = []
+
+        def gh(*args):
+            events.append(args)
+            if "POST" in args:
+                return json.dumps(draft)
+            if args == ("api", f"repos/{release.REPOSITORY}/releases/123"):
+                return json.dumps(uploaded)
+            return ""
+
+        with patch.object(release, "release_for_tag", return_value=None) as lookup, patch.object(release, "gh", side_effect=gh), patch.object(release, "verify_remote_assets") as verify:
+            release.publish("v1.2.3", "1.2.3", "abc", "notes", [Path("a.zip")])
+        lookup.assert_called_once_with("v1.2.3")
+        self.assertEqual(events[0], ("api", f"repos/{release.REPOSITORY}/git/ref/tags/v1.2.3"))
+        self.assertIn("POST", events[1])
+        self.assertIn("draft=true", events[1])
+        self.assertIn("tag_name=v1.2.3", events[1])
+        self.assertIn("target_commitish=abc", events[1])
+        verify.assert_called_once_with("v1.2.3", [Path("a.zip")], uploaded)
+        self.assertIn("PATCH", events[-1])
+        self.assertIn("draft=false", events[-1])
+
+    def test_missing_remote_tag_prevents_draft_creation(self):
+        with patch.object(release, "release_for_tag", return_value=None), patch.object(release, "gh", side_effect=subprocess.CalledProcessError(1, "gh")) as gh:
+            with self.assertRaises(subprocess.CalledProcessError):
+                release.publish("v1.2.3", "1.2.3", "abc", "notes", [])
+        gh.assert_called_once_with("api", f"repos/{release.REPOSITORY}/git/ref/tags/v1.2.3")
+
+    def test_failed_asset_verification_leaves_draft_unpublished(self):
+        draft = {"id": 123, "draft": True, "body": "Source commit: `abc`", "assets": []}
+        with patch.object(release, "release_for_tag", return_value=draft), patch.object(release, "gh", return_value=json.dumps(draft)) as gh, patch.object(release, "verify_remote_assets", side_effect=ValueError("mismatch")):
+            with self.assertRaises(ValueError):
+                release.publish("v1.2.3", "1.2.3", "abc", "notes", [Path("a.zip")])
+        self.assertFalse(any("PATCH" in call.args for call in gh.call_args_list))
 
     def test_failed_upload_leaves_draft_unpublished(self):
-        draft = {"draft": True, "body": "Source commit: `abc`", "assets": []}
+        draft = {"id": 123, "draft": True, "body": "Source commit: `abc`", "assets": []}
         with patch.object(release, "release_for_tag", return_value=draft), patch.object(release, "gh", side_effect=subprocess.CalledProcessError(1, "gh")) as gh:
             with self.assertRaises(subprocess.CalledProcessError):
                 release.publish("v1.2.3", "1.2.3", "abc", "notes", [Path("a.zip")])
