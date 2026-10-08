@@ -1,6 +1,7 @@
 import Domain
 import Foundation
 import Infrastructure
+import os
 
 enum T3ServerTests {
     /// Read-only check against the T3 server running for `settings`: issues a read-only session,
@@ -11,21 +12,23 @@ enum T3ServerTests {
         }
         print("T3 server pid \(server.runtime.pid) via \(server.executableURL.lastPathComponent)")
         let done = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var outcome: Result<[T3ProviderStatus], Error> = .success([])
+        let outcome = OSAllocatedUnfairLock<Result<[T3ProviderStatus], Error>>(initialState: .success([]))
         Task.detached {
+            let result: Result<[T3ProviderStatus], Error>
             do {
-                outcome = .success(try await server.withSession(scopes: ["orchestration:read"]) { session in
+                result = .success(try await server.withSession(scopes: ["orchestration:read"]) { session in
                     let connection = session.connect()
                     defer { Task { await connection.close() } }
                     return T3ProviderStatus.parseConfig(try await connection.request("server.getConfig"))
                 })
             } catch {
-                outcome = .failure(error)
+                result = .failure(error)
             }
+            outcome.withLock { $0 = result }
             done.signal()
         }
         done.wait()
-        for status in try outcome.get() {
+        for status in try outcome.withLock({ $0 }).get() {
             print("\(status.instanceID) [\(status.driver)] \(status.auth.rawValue) windows=\(status.usageWindows.count)")
         }
     }
