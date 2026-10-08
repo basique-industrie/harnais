@@ -1,0 +1,36 @@
+name: T3 nightly compatibility
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: t3-nightly-compatibility
+  cancel-in-progress: false
+
+jobs:
+  current-upstream:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+      - name: Check current T3 Stable and Nightly contracts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-t3-compatibility.py --latest
+      - name: Save tested versions and commits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t3-compatibility
+          path: dist/t3-compatibility.json
+          retention-days: 30

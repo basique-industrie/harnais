@@ -267,6 +267,21 @@ public final class HarnaisRuntime {
         }
     }
 
+    public func setColor(_ color: AccountColor?, managesT3: Bool, for account: Account) {
+        do {
+            guard var updated = try service.registry.accounts().first(where: { $0.id == account.id }) else {
+                throw HarnaisError.missingAccount
+            }
+            updated.accentColor = color?.rawValue
+            updated.managesT3Color = managesT3
+            try service.registry.update(updated)
+            reload()
+            syncT3IfListed(updated)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     public func remove(_ account: Account) {
         let wasInT3 = t3Placement(for: account) == .merged
         do {

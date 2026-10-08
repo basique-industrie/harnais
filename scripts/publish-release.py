@@ -82,6 +82,16 @@ def artifacts(version, directory):
     return archive, checksum
 
 
+def has_updater():
+    with Path("Sources/HarnaisCore/Info.plist").open("rb") as handle:
+        return bool(plistlib.load(handle).get("SUPublicEDKey"))
+
+
+def verify_appcast(feed, archive):
+    subprocess.run(["swift", str(Path(__file__).with_name("verify-appcast.swift")), str(feed), str(archive),
+                    "Sources/HarnaisCore/Info.plist"], check=True)
+
+
 def verify_app(version, archive):
     with tempfile.TemporaryDirectory(prefix="harnais-verify-") as directory:
         subprocess.run(["ditto", "-x", "-k", str(archive), directory], check=True)
@@ -94,6 +104,9 @@ def verify_app(version, archive):
                 or info["CFBundleVersion"] != source_info["CFBundleVersion"]
                 or info["CFBundleIdentifier"] != "com.jean.harnais"):
             raise ValueError("Archive app identity or version differs from the tagged source.")
+        for key in ("SUPublicEDKey", "SUFeedURL", "SURequireSignedFeed", "SUVerifyUpdateBeforeExtraction"):
+            if info.get(key) != source_info.get(key):
+                raise ValueError(f"Archive updater setting {key} differs from the tagged source.")
         for command in (
             ["codesign", "--verify", "--deep", "--strict", str(app)],
             ["xcrun", "stapler", "validate", str(app)],
@@ -170,9 +183,12 @@ def main():
             with tempfile.TemporaryDirectory(prefix="harnais-published-") as directory:
                 gh("release", "download", args.tag, "--repo", REPOSITORY, "--dir", directory,
                    "--pattern", f"Harnais-{version}-arm64.zip",
-                   "--pattern", f"Harnais-{version}-arm64.zip.sha256")
+                   "--pattern", f"Harnais-{version}-arm64.zip.sha256",
+                   *(["--pattern", "appcast.xml"] if has_updater() else []))
                 files = artifacts(version, Path(directory))
                 verify_app(version, files[0])
+                if has_updater():
+                    verify_appcast(Path(directory) / "appcast.xml", files[0])
             print(f"Published {args.tag} verified; no assets will be changed.")
         if os.environ.get("GITHUB_OUTPUT"):
             with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
@@ -181,6 +197,10 @@ def main():
         return
     files = artifacts(version, args.artifacts)
     verify_app(version, files[0])
+    if has_updater():
+        feed = args.artifacts / "appcast.xml"
+        verify_appcast(feed, files[0])
+        files = (*files, feed)
     if args.command == "publish":
         publish(args.tag, version, commit, notes, files)
     else:

@@ -22,6 +22,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/migueldeicaza/SwiftTerm.git", exact: "1.19.0"),
         .package(url: "https://github.com/dduan/TOMLDecoder.git", exact: "0.4.5"),
+        .package(url: "https://github.com/sparkle-project/Sparkle.git", exact: "2.10.0"),
     ],
     targets: [
         .target(
@@ -51,6 +52,7 @@ let package = Package(
                 "Domain",
                 "Infrastructure",
                 .product(name: "SwiftTerm", package: "SwiftTerm"),
+                .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources/HarnaisCore",
             exclude: [
@@ -64,7 +66,8 @@ let package = Package(
             swiftSettings: [
                 .unsafeFlags(["-enable-testing"], .when(configuration: .debug)),
                 .swiftLanguageMode(.v6),
-            ]
+            ],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .executableTarget(
             name: "HarnaisApp",

@@ -30,6 +30,18 @@ jobs:
       - name: Build
         run: swift build -c debug
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+
+      - name: Pinned T3 compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check-t3-compatibility.py
+
+      - name: Signed update regression tests
+        run: python3 scripts/test-appcast.py
+
       - name: Public source checks
         run: python3 scripts/check-public-release.py
 

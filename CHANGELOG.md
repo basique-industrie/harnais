@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 - 2026-10-08
+
+- Check for signed Harnais updates from About or the application menu, with an optional automatic check and a verified update feed. Harnais Dev remains a separate development app.
+- Test exported profiles and server requests against pinned T3 Stable and Nightly contracts, with a separate check for new nightly releases.
+- Give accounts a color in Harnais and optionally sync it to T3, while preserving existing T3 colors unless explicitly managed.
+
 ## 0.2.1 - 2026-10-08
 
 - Sign and publish releases directly in Harnais's protected GitHub environment, with verified uploads, safe retries and a notarization-only validation mode.

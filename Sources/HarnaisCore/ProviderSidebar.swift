@@ -202,6 +202,7 @@ private struct ProviderInstanceRow: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
+                        AccountColorMark(account: account)
                         if report.showsStatusDot {
                             Circle()
                                 .fill(HarnaisPalette.statusDot(report.kind))

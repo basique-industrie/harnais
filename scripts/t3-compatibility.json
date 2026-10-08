@@ -1,0 +1,15 @@
+{
+  "repository": "pingdotgg/t3code",
+  "releases": [
+    {
+      "channel": "stable",
+      "tag": "v0.0.45",
+      "commit": "6c8fed35dded9ff71c5b46807125457acbb76be6"
+    },
+    {
+      "channel": "nightly",
+      "tag": "v0.0.46-nightly.20261008.2813",
+      "commit": "30cc788975500a8c00d32a50f348174d1ce578d1"
+    }
+  ]
+}
