@@ -18,6 +18,7 @@ struct HarnaisApp: App {
         .windowBackgroundDragBehavior(.enabled)
         .commands {
             HarnaisAccountCommands()
+            HarnaisUpdateCommands()
         }
     }
 }

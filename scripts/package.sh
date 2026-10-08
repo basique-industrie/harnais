@@ -103,11 +103,22 @@ fi
 rm -rf "$STAGED_APP/Contents/Resources/Harnais_Infrastructure.bundle"
 cp -R "$INFRA_BUNDLE" "$STAGED_APP/Contents/Resources/Harnais_Infrastructure.bundle"
 
+# Sparkle is a dynamic framework. Preserve its versioned symlinks and sign
+# nested helpers before the framework and host, with the same release identity.
+SPARKLE="$STAGED_APP/Contents/Frameworks/Sparkle.framework"
+mkdir -p "$STAGED_APP/Contents/Frameworks"
+ditto "$BINARY_DIRECTORY/Sparkle.framework" "$SPARKLE"
+install -m 0644 .build/artifacts/sparkle/Sparkle/LICENSE "$STAGED_APP/Contents/Resources/Sparkle-LICENSE.txt"
+
 SIGNATURE="${SIGNING_IDENTITY:--}"
 SIGN_ARGUMENTS=(--force --sign "$SIGNATURE")
 if [[ "$SIGNATURE" != "-" ]]; then
   SIGN_ARGUMENTS+=(--options runtime --timestamp)
 fi
+for component in XPCServices/Downloader.xpc XPCServices/Installer.xpc Autoupdate Updater.app; do
+  codesign "${SIGN_ARGUMENTS[@]}" --preserve-metadata=entitlements "$SPARKLE/Versions/B/$component"
+done
+codesign "${SIGN_ARGUMENTS[@]}" "$SPARKLE"
 for executable in harnais-whatsapp harnais; do
   codesign "${SIGN_ARGUMENTS[@]}" "$STAGED_APP/Contents/MacOS/$executable"
 done

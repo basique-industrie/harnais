@@ -36,6 +36,8 @@ struct AboutPageView: View {
             .background(HarnaisPalette.surface, in: RoundedRectangle(cornerRadius: 12))
             .overlay { RoundedRectangle(cornerRadius: 12).strokeBorder(HarnaisPalette.border, lineWidth: 1) }
 
+            HarnaisUpdateSection()
+
             Text("Account settings and credentials stay on this Mac. Connected services receive the requests you authorize. Harnais has no analytics or advertising.")
                 .font(.system(size: 13))
                 .foregroundStyle(HarnaisPalette.label)

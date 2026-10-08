@@ -37,6 +37,7 @@ struct ProviderEditorView: View {
     var onCancelT3SignIn: (() -> Void)?
     var errorMessage: String?
     var successMessage: String?
+    var onColorChange: (AccountColor?, Bool) -> Void = { _, _ in }
 
     @State private var draftName = ""
     @State private var isEditingName = false
@@ -67,6 +68,8 @@ struct ProviderEditorView: View {
                     connectionsAndSkills
                     if account.provider == .opencode { connectedAccounts }
                 case .settings:
+                    AccountColorSection(account: account, isNativeT3Account: t3Placement == .nativeDefault,
+                                        onChange: onColorChange)
                     files
                     t3Section
                     removeSection
@@ -137,6 +140,7 @@ struct ProviderEditorView: View {
 
     private var accountHeading: some View {
         HStack(alignment: .top, spacing: 12) {
+            AccountColorMark(account: account).padding(.top, 10)
             ProviderMark(provider: account.provider, size: 32)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 4) {

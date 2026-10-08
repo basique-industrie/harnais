@@ -4,6 +4,7 @@ import Foundation
 public struct T3ProviderInstance: Codable, Sendable, Equatable {
     public var driver: String
     public var displayName: String
+    public var accentColor: String?
     public var enabled: Bool
     public var config: [String: String]
     public var environment: [T3EnvironmentVariable]
@@ -11,12 +12,14 @@ public struct T3ProviderInstance: Codable, Sendable, Equatable {
     public init(
         driver: String,
         displayName: String,
+        accentColor: String? = nil,
         enabled: Bool = true,
         config: [String: String] = [:],
         environment: [T3EnvironmentVariable] = []
     ) {
         self.driver = driver
         self.displayName = displayName
+        self.accentColor = accentColor
         self.enabled = enabled
         self.config = config
         self.environment = environment
@@ -132,7 +135,8 @@ public struct T3Exporter: Sendable {
             // The stable instance ID owns T3's SDK credentials. A CLI home or
             // cursor-agent binary cannot select that account in SDK builds.
             return T3ProviderInstance(driver: account.provider.t3Driver,
-                                      displayName: "\(account.provider.displayName) \(account.label)")
+                                      displayName: "\(account.provider.displayName) \(account.label)",
+                                      accentColor: account.t3AccentColor)
         }
         var config: [String: String] = [:]
         if let binary = BinaryLocator.resolve(account.provider, override: account.binaryPath) {
@@ -160,6 +164,7 @@ public struct T3Exporter: Sendable {
         return T3ProviderInstance(
             driver: account.provider.t3Driver,
             displayName: "\(account.provider.displayName) \(account.label)",
+            accentColor: account.t3AccentColor,
             config: config,
             environment: environment
         )
@@ -220,6 +225,8 @@ public struct T3Exporter: Sendable {
     }
 
     private func apply(accounts: [Account], changes: T3InstanceChanges, through server: T3Server, settingsURL: URL) async throws {
+        let serverVersion = await server.runtime.serverVersion()
+        let legacy = T3SettingsUpdate.usesLegacyPatch(version: serverVersion ?? T3Build(appURL: server.appURL).version)
         try await server.withSession { session in
             let connection = session.connect()
             defer { Task { await connection.close() } }
@@ -237,16 +244,24 @@ public struct T3Exporter: Sendable {
             if let original = try? Data(contentsOf: settingsURL) {
                 try backUp(original, of: settingsURL)
             }
-            for (index, id) in changed.enumerated() {
-                let mutation: [String: Any] = [
-                    "patch": [String: Any](),
-                    "providerInstanceMutation": ["operation": "upsert", "instanceId": id, "instance": merged[id] ?? [:]],
-                ]
+            // Stable uses the same whole-map patch as its own UI, from this fresh
+            // server snapshot. Nightly updates one ID without replacing other IDs.
+            for id in legacy ? Array(changed.prefix(1)) : changed {
+                let mutation = T3SettingsUpdate.payload(instanceID: id, instances: merged, legacy: legacy)
                 do {
-                    _ = try await connection.request("server.updateSettings",
-                                                     payload: JSONSerialization.data(withJSONObject: mutation))
-                } catch T3ServerError.unavailable(let message) where index > 0 {
-                    // Earlier entries already changed; editing the file now could undo T3's own writes.
+                    let response = try await connection.request("server.updateSettings",
+                        payload: JSONSerialization.data(withJSONObject: mutation))
+                    guard let updated = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
+                          let actual = updated["providerInstances"] as? [String: Any],
+                          T3SettingsUpdate.changesLanded(
+                            before: legacy ? current : [id: current[id] ?? [:]],
+                            desired: legacy ? merged : [id: merged[id] ?? [:]], actual: actual)
+                    else {
+                        throw T3ServerError.rejected("T3 Code did not save the requested profile changes. Sync was cancelled; check T3 compatibility.")
+                    }
+                } catch T3ServerError.unavailable(let message) {
+                    // A dropped response does not prove the write failed. Never
+                    // fall back to a file edit after attempting a server mutation.
                     throw T3ServerError.rejected(message)
                 }
             }
@@ -341,6 +356,8 @@ public struct T3Exporter: Sendable {
                 throw HarnaisError.processFailed("The T3 Code profile for \(account.label) has an incompatible configuration. Sync was cancelled.")
             }
             existing["displayName"] = desired["displayName"]
+            // Color management is explicit; ordinary sync preserves T3's custom accents.
+            if account.managesT3Color == true { existing["accentColor"] = account.t3AccentColor }
             var config = existing["config"] as? [String: Any] ?? [:]
             for (key, value) in proposed.config { config[key] = value }
             // A removed shadow must not keep routing this profile to an old login.
@@ -529,6 +546,7 @@ extension T3ProviderInstance {
             "enabled": enabled,
             "config": config,
         ]
+        if let accentColor { object["accentColor"] = accentColor }
         if !environment.isEmpty {
             object["environment"] = environment.map {
                 ["name": $0.name, "value": $0.value, "sensitive": $0.sensitive]

@@ -55,7 +55,8 @@ struct AccountListView: View {
                 onSignInT3: { runtime.signInToT3(account) },
                 onCancelT3SignIn: { runtime.cancelT3SignIn(account) },
                 errorMessage: runtime.errorMessage,
-                successMessage: runtime.didUpdateT3 ? nil : runtime.successMessage
+                successMessage: runtime.didUpdateT3 ? nil : runtime.successMessage,
+                onColorChange: { runtime.setColor($0, managesT3: $1, for: account) }
             )
             .id(account.id)
         }

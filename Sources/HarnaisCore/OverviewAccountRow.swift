@@ -35,9 +35,12 @@ struct OverviewAccountRow: View {
     private var identity: some View {
         Button(action: onOpen) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(name)
-                    .font(HarnaisType.rowTitle)
-                    .foregroundStyle(HarnaisPalette.text)
+                HStack(spacing: 6) {
+                    AccountColorMark(account: account)
+                    Text(name)
+                        .font(HarnaisType.rowTitle)
+                        .foregroundStyle(HarnaisPalette.text)
+                }
                 if AccountNaming.shouldShowMailbox(visibleName: name, email: report.email), let email = report.email {
                     Text(email)
                         .font(.system(size: 11))

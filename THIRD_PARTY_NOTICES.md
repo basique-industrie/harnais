@@ -1,5 +1,12 @@
 # Third-party notices
 
+## Sparkle
+
+Harnais uses Sparkle 2.10.0 for signed application updates.
+https://github.com/sparkle-project/Sparkle
+Its full license and dependency notices are packaged in
+`Contents/Resources/Sparkle-LICENSE.txt`.
+
 ## WhatsApp linked-device helper
 
 The optional personal WhatsApp connection uses whatsmeow, an unofficial client,

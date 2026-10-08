@@ -15,6 +15,9 @@ public struct Account: Codable, Sendable, Equatable, Identifiable, Hashable {
     public var lastLoginAt: Date?
     public var importedDefault: Bool
     public var codexMode: CodexIsolationMode?
+    /// Optional fields keep existing registries compatible. Unknown future colors are ignored.
+    public var accentColor: String?
+    public var managesT3Color: Bool?
 
     public init(
         id: UUID = UUID(),
@@ -29,7 +32,9 @@ public struct Account: Codable, Sendable, Equatable, Identifiable, Hashable {
         createdAt: Date = Date(),
         lastLoginAt: Date? = nil,
         importedDefault: Bool = false,
-        codexMode: CodexIsolationMode? = nil
+        codexMode: CodexIsolationMode? = nil,
+        accentColor: String? = nil,
+        managesT3Color: Bool? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -44,6 +49,8 @@ public struct Account: Codable, Sendable, Equatable, Identifiable, Hashable {
         self.lastLoginAt = lastLoginAt
         self.importedDefault = importedDefault
         self.codexMode = codexMode
+        self.accentColor = accentColor
+        self.managesT3Color = managesT3Color
     }
 
     public var wrapperName: String {

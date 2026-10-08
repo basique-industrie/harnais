@@ -6,6 +6,10 @@ import Infrastructure
 @main
 enum HarnaisSelfTests {
     static func main() throws {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--write-t3-contract-fixtures" {
+            try T3ContractFixtures.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
+            return
+        }
         if CommandLine.arguments.count == 4, CommandLine.arguments[1] == "--verify-t3-sync-copy" {
             try T3SyncSafetyTests.verifyCopy(registry: URL(fileURLWithPath: CommandLine.arguments[2]),
                                              settings: URL(fileURLWithPath: CommandLine.arguments[3]))
@@ -67,6 +71,8 @@ enum HarnaisSelfTests {
         try SkillPresentationTests.run(root: root, expect: expect)
         try T3SyncSafetyTests.run(root: root, expect: expect)
         try T3CursorSDKTests.run(root: root, expect: expect)
+        try AccountColorTests.run(root: root, expect: expect)
+        T3SettingsUpdateTests.run(expect: expect)
         try CodexWeekTests.run(root: root, expect: expect)
         try TerminalCLITests.run(root: root, expect: expect)
         try OpenCodeTests.run(root: root, expect: expect)
