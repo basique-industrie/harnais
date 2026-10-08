@@ -39,6 +39,7 @@ public final class HarnaisRuntime {
     public internal(set) var t3Builds: [T3Build] = []
     public internal(set) var t3RunningServer: T3RunningServer?
     public internal(set) var t3SignIns: [UUID: T3AuthState] = [:]
+    var pendingT3SignInPrompts: [UUID] = []
     var pendingT3Syncs = 0
     @ObservationIgnored var t3SyncTask: Task<Void, Never>?
     @ObservationIgnored var t3SignInTasks: [UUID: Task<Void, Never>] = [:]

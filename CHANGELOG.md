@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Sign and publish releases directly in Harnais's protected GitHub environment, with verified uploads, safe retries and a notarization-only validation mode.
+- Export Cursor profiles by their stable T3 instance ID when all installed T3 builds use the SDK, removing obsolete CLI settings while preserving T3 logins and model choices. Keep CLI isolation when a Stable/CLI build is also installed.
+- Offer T3's Cursor sign-in immediately after adding a profile, including profiles added by automatic sync.
+
 ## 0.2.0 - 2026-10-08
 
 - Find T3 Code Dev settings at `~/.t3/dev/settings.json`.

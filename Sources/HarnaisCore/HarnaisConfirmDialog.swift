@@ -6,6 +6,8 @@ struct HarnaisConfirmDialog: View {
     let title: String
     let message: String
     var confirmTitle = "Delete"
+    var cancelTitle = "Cancel"
+    var confirmRole: ButtonRole? = .destructive
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -27,10 +29,10 @@ struct HarnaisConfirmDialog: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
-                    HarnaisButton(title: "Cancel", action: onCancel)
+                    HarnaisButton(title: cancelTitle, action: onCancel)
                     HarnaisButton(
                         title: confirmTitle,
-                        role: .destructive,
+                        role: confirmRole,
                         prominence: .primary,
                         action: onConfirm
                     )

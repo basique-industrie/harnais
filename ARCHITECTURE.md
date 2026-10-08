@@ -50,7 +50,7 @@ file it finds (`~/.t3/userdata/settings.json`, `~/.t3/dev/settings.json`,
 and never replaces unrelated T3 state. Imported vendor defaults
 (`~/.claude`, `~/.codex`, `~/.cursor`) are skipped: T3 already owns those
 slots as `claudeAgent`, `codex`, and `cursor`. Apply does not add a
-`harnais_*` key that would duplicate a native instance with the same driver
+`harnais_*` key that would duplicate a CLI instance with the same driver
 and home, and never removes existing keys, so conversations that reference
 retired profiles keep working. T3-managed Codex instances
 (`setupMode: "managed"`) keep their ChatGPT tokens in T3 and never count as
@@ -60,9 +60,14 @@ T3 Code Stable and Nightly share the bundle ID `com.t3tools.t3code` and the
 same settings file. Nightly builds from 0.0.46 run Cursor through the bundled
 `@cursor/sdk`, which ignores `cursor-agent`, `binaryPath` and
 `CURSOR_CONFIG_DIR`; each Cursor provider in T3 signs in on its own. Harnais
-keeps exporting the CLI profile for Stable and detects SDK builds from
-`Contents/Resources/node_modules/@cursor/sdk-*` to tell the user to sign in
-to the profile in T3.
+detects SDK builds from `Contents/Resources/node_modules/@cursor/sdk-*`.
+When every detected build uses the SDK, new Cursor entries contain their
+name and stable `harnais_cursor_<slug>` ID without CLI configuration. Updates
+remove only `binaryPath`, `CURSOR_CONFIG_DIR` and `AGENT_CLI_CREDENTIAL_STORE`,
+preserving existing T3 credentials, enabled state, model settings and unknown
+fields. SDK identities are never deduplicated by CLI home. When a CLI build is
+also installed, or no build is known, Harnais retains the CLI export; a later
+sync restores these settings if a CLI build is installed again.
 
 ### Through the running server
 
@@ -99,6 +104,11 @@ acknowledged until a final phase arrives. It opens the HTTPS sign-in page once.
 T3 locks the provider during a flow, so cancelling or timing out sends
 `provider.auth.cancel` from a fresh connection with the same session. If T3 is
 closed, Harnais opens the SDK build in the background first.
+After a successful sync adds or re-enables a Cursor profile without an SDK
+login, Harnais offers to sign in or do it later. Offers are queued one at a
+time, including automatic additions; already authenticated profiles are
+skipped. Signing in uses the existing T3 auth flow and never copies the
+Harnais terminal login into T3.
 
 T3-managed ChatGPT accounts (`driver: codex`, `config.setupMode: "managed"`)
 are read from settings and the status cache only. Harnais does not read T3's
