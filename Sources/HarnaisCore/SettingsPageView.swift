@@ -18,7 +18,10 @@ struct SettingsPageView: View {
             path
             data
         }
-        .onAppear { runtime.refreshTerminals() }
+        .onAppear {
+            runtime.refreshTerminals()
+            runtime.refreshT3Installation()
+        }
     }
 
     private var usageWindows: some View {
@@ -42,12 +45,28 @@ struct SettingsPageView: View {
         ) {
             SettingsRow(
                 title: "T3 Code",
-                description: "Add or update extra profiles. Keeps T3 settings and saves a backup."
+                description: "Add or update extra profiles. Uses T3 itself when it's open, otherwise edits its settings and saves a backup. Profiles already in T3 stay updated."
             ) {
-                if runtime.didUpdateT3 {
+                if runtime.isSyncingT3 {
+                    ProgressView().controlSize(.small)
+                } else if runtime.didUpdateT3 {
                     SettingsCheck(title: HarnaisRuntime.t3UpdatedMessage)
                 } else {
                     HarnaisButton(title: "Sync extra profiles") { runtime.applyT3() }
+                }
+            }
+            ForEach(runtime.t3Builds) { build in
+                SettingsDivider()
+                t3BuildRow(build)
+            }
+            if let server = runtime.t3RunningServer, runningBuild == nil {
+                SettingsDivider()
+                SettingsRow(
+                    title: "T3 server",
+                    description: "Running outside an installed T3 app, e.g. a development server.",
+                    status: server.version.map { "Version \($0)" }
+                ) {
+                    SettingsCheck(title: "Running")
                 }
             }
             SettingsDivider()
@@ -69,6 +88,30 @@ struct SettingsPageView: View {
                 }
             }
         }
+    }
+
+    private func t3BuildRow(_ build: T3Build) -> some View {
+        let running = runningBuild == build
+        var status = [build.channel.displayName, build.version].compactMap { $0 }.joined(separator: " · ")
+        if running, let version = runtime.t3RunningServer?.version, version != build.version {
+            status += " · server \(version)"
+        }
+        return SettingsRow(
+            title: build.name,
+            description: build.usesCursorSDK
+                ? "Cursor signs in inside T3, once per Cursor provider. Use T3 sign-in on a Cursor account."
+                : "Cursor uses the Harnais profiles.",
+            status: status
+        ) {
+            if running {
+                SettingsCheck(title: "Running")
+            }
+        }
+    }
+
+    private var runningBuild: T3Build? {
+        guard let app = runtime.t3RunningServer?.appURL?.standardizedFileURL.path else { return nil }
+        return runtime.t3Builds.first { $0.appURL.standardizedFileURL.path == app }
     }
 
     private var ilesDescription: String? {

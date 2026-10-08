@@ -11,6 +11,10 @@ enum HarnaisSelfTests {
                                              settings: URL(fileURLWithPath: CommandLine.arguments[3]))
             return
         }
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--probe-t3-server" {
+            try T3ServerTests.probe(settings: URL(fileURLWithPath: CommandLine.arguments[2]))
+            return
+        }
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--benchmark-usage" {
             try UsagePresentationTests.benchmark(cacheURL: URL(fileURLWithPath: CommandLine.arguments[2]))
             return
@@ -188,6 +192,14 @@ enum HarnaisSelfTests {
             candidates.contains { $0.path.hasSuffix("Library/Application Support/T3 Code/userdata/settings.json") },
             "T3 discovery still lists the legacy Application Support path"
         )
+        expect(
+            candidates.contains { $0.path.hasSuffix(".t3/dev/settings.json") },
+            "T3 discovery includes the dev state directory"
+        )
+        expect(
+            !candidates.contains { $0.path.hasSuffix(".t3/dev/userdata/settings.json") },
+            "T3 dev settings are not under userdata"
+        )
         let realT3 = t3Home.appendingPathComponent(".t3/userdata")
         try FileManager.default.createDirectory(at: realT3, withIntermediateDirectories: true)
         let discoveredSettings = realT3.appendingPathComponent("settings.json")
@@ -251,7 +263,41 @@ enum HarnaisSelfTests {
         expect(dedupedInstances?["codex_personal"] != nil, "T3 apply keeps a native Codex instance with the same home")
         expect(dedupedInstances?[collidingCodex.t3InstanceID] == nil, "T3 apply does not duplicate a native instance with the same home")
 
+        // A T3-managed ChatGPT account holds its own tokens, so it is not the Harnais login at that home.
+        try Data(
+            """
+            {"providerInstances":{"codex_managed":{"driver":"codex","enabled":true,"config":{"setupMode":"managed","homePath":"\(existingCodexHome)"}}}}
+            """.utf8
+        ).write(to: discoveredSettings)
+        try T3Exporter(settingsURL: discoveredSettings, homeDirectory: t3Home).apply(accounts: [collidingCodex])
+        let managed = try JSONSerialization.jsonObject(with: Data(contentsOf: discoveredSettings)) as? [String: Any]
+        let managedInstances = managed?["providerInstances"] as? [String: Any]
+        expect(managedInstances?["codex_managed"] != nil, "T3 apply keeps a T3-managed Codex instance")
+        expect(managedInstances?[collidingCodex.t3InstanceID] != nil, "T3-managed Codex does not hide a Harnais login at the same home")
+
+        let stableT3 = root.appendingPathComponent("T3 Code.app")
+        let nightlyT3 = root.appendingPathComponent("T3 Code (Nightly).app")
+        try FileManager.default.createDirectory(
+            at: stableT3.appendingPathComponent("Contents/Resources/node_modules/@anthropic-ai"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(
+            at: nightlyT3.appendingPathComponent("Contents/Resources/node_modules/@cursor/sdk-darwin-arm64"),
+            withIntermediateDirectories: true
+        )
+        expect(!T3Installation(appURLs: []).signsInToCursorSeparately, "No T3 install uses Cursor CLI defaults")
+        expect(!T3Installation(appURLs: [stableT3]).signsInToCursorSeparately, "T3 builds without the Cursor SDK use the CLI profile")
+        expect(
+            T3Installation(appURLs: [stableT3, nightlyT3]).signsInToCursorSeparately,
+            "T3 builds bundling the Cursor SDK sign in to Cursor separately"
+        )
+        expectEqual(T3Build.channel(forVersion: "0.0.46-nightly.20261007.2774"), .nightly, "T3 nightly channel")
+        expectEqual(T3Build.channel(forVersion: "0.0.46-preview.20261008.2802"), .preview, "T3 preview channel")
+        expectEqual(T3Build.channel(forVersion: "0.0.45"), .stable, "T3 stable channel")
+        expectEqual(T3Build.channel(forVersion: nil), .stable, "T3 build without a version")
+
         try TerminalLauncherTests.run(root: root, expect: expect)
+        try T3ServerTests.run(root: root, expect: expect)
 
         let wrapperIdentity = AppIdentity(dataDirectory: root.appendingPathComponent("harnais-data"))
         let wrappers = WrapperGenerator(identity: wrapperIdentity)

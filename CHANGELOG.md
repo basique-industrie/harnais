@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Find T3 Code Dev settings at `~/.t3/dev/settings.json`.
+- Tell Cursor users to sign in inside T3 when T3 Code runs Cursor through its SDK (Nightly 0.0.46+).
+- Keep exporting Harnais Codex profiles when T3 has a T3-managed ChatGPT account at the same home.
+- Update T3 Code through its running server when it's open, so T3 applies the change itself. Harnais still edits the settings file, with a backup, when T3 is closed.
+- Sign in to a Cursor provider in T3 from the account's Settings tab, and see which account each T3 provider is signed in to, with a warning when it differs from the Harnais profile.
+- Show ChatGPT accounts that T3 manages itself under Codex in Usage → Limits, with the limits T3 reports and a link to ChatGPT usage.
+- Keep T3 in step automatically: profiles already in T3 are updated after a rename or login, new extra profiles are added when T3 already lists that provider's profiles, and removed profiles are turned off in T3. Changes made in T3 appear in Harnais right away.
+- List installed T3 Code builds in Settings with their channel, version, how they handle Cursor, and which one is running.
+
 ## 0.1.3 - 2026-10-04
 
 - Update mise-managed command-line tools with `mise upgrade --bump`, and check mise for the latest version.

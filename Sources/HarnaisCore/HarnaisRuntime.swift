@@ -32,6 +32,20 @@ public final class HarnaisRuntime {
     public internal(set) var settings = HarnaisSettingsDocument()
     public internal(set) var installedTerminals: [InstalledTerminal] = []
     public internal(set) var t3Placements: [UUID: T3AccountPlacement] = [:]
+    public internal(set) var t3SignsInToCursorSeparately = false
+    /// What T3 last reported per provider instance, keyed by instance ID.
+    public internal(set) var t3Statuses: [String: T3ProviderStatus] = [:]
+    public internal(set) var t3ManagedAccounts: [T3ManagedAccount] = []
+    public internal(set) var t3Builds: [T3Build] = []
+    public internal(set) var t3RunningServer: T3RunningServer?
+    public internal(set) var t3SignIns: [UUID: T3AuthState] = [:]
+    var pendingT3Syncs = 0
+    @ObservationIgnored var t3SyncTask: Task<Void, Never>?
+    @ObservationIgnored var t3SignInTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored var t3OpenedSignInURLs: [UUID: URL] = [:]
+    @ObservationIgnored var t3Watcher: T3SettingsWatcher?
+    @ObservationIgnored var t3WatchedURLs: [URL] = []
+    @ObservationIgnored var t3RunningServerGeneration = 0
     public internal(set) var connections: [IntegrationConnection] = []
     public internal(set) var grafanaBinaryInstalled = false
     public internal(set) var islandConfig = IslandPublishConfig()
@@ -74,6 +88,10 @@ public final class HarnaisRuntime {
 
     public var didUpdateT3: Bool {
         successMessage == Self.t3UpdatedMessage
+    }
+
+    public var isSyncingT3: Bool {
+        pendingT3Syncs > 0
     }
 
     public func ownedAccounts(provider: ProviderKind) -> [Account] {
@@ -148,7 +166,8 @@ public final class HarnaisRuntime {
             settings = (try? settingsStore.load()) ?? HarnaisSettingsDocument()
             codexWeekStates = CodexWeekStarter().states()
             installedTerminals = terminalLauncher.installedApplications()
-            refreshT3Placements()
+            refreshT3Installation()
+            refreshT3State()
             errorMessage = nil
             if selectedAccountID == nil || !accounts.contains(where: { $0.id == selectedAccountID }) {
                 selectedAccountID = accounts.first?.id
@@ -220,14 +239,16 @@ public final class HarnaisRuntime {
         reload()
         selectedAccountID = account.id
         checkConnection(account)
+        syncT3IfListed(account, isNew: true)
         return account
     }
 
     public func finishLogin(_ account: Account) {
         do {
-            _ = try service.refreshMetadata(account)
+            let updated = try service.refreshMetadata(account)
             reload()
             checkConnection(account)
+            syncT3IfListed(updated)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -239,14 +260,20 @@ public final class HarnaisRuntime {
             errorMessage = nil
             reload()
             selectedAccountID = updated.id
+            syncT3IfListed(updated)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
     public func remove(_ account: Account) {
+        let wasInT3 = t3Placement(for: account) == .merged
         do {
             try service.remove(account)
+            if wasInT3 {
+                // T3 keeps the entry, turned off, so chats that used it still open.
+                syncT3(accounts: [], changes: T3InstanceChanges(disable: [account.t3InstanceID]), announce: false)
+            }
             reports[account.id] = nil
             if selectedAccountID == account.id {
                 selectedAccountID = nil

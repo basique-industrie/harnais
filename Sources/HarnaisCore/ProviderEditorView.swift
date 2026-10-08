@@ -1,5 +1,6 @@
 import Domain
 import Foundation
+import Infrastructure
 import SwiftUI
 
 struct ProviderEditorView: View {
@@ -8,6 +9,7 @@ struct ProviderEditorView: View {
     let quotas: [FeedQuota]
     let wrapperPath: String
     let t3Placement: T3AccountPlacement
+    let t3SignsInSeparately: Bool
     let onRename: (String) -> Void
     let onLogin: () -> Void
     let onTerminal: () -> Void
@@ -28,6 +30,11 @@ struct ProviderEditorView: View {
     var isChecking = false
     var isRefreshingLimits = false
     var t3Success = false
+    var t3Status: T3ProviderStatus?
+    var t3SignIn: T3AuthState?
+    var isSyncingT3 = false
+    var onSignInT3: (() -> Void)?
+    var onCancelT3SignIn: (() -> Void)?
     var errorMessage: String?
     var successMessage: String?
 
@@ -244,6 +251,12 @@ struct ProviderEditorView: View {
             ) {
                 t3Control
             }
+            if t3Placement != .notMerged {
+                SettingsDivider()
+                SettingsRow(title: "T3 sign-in", description: t3SignInDescription, status: t3CheckedLabel) {
+                    t3SignInControl
+                }
+            }
             SettingsDivider()
             editorCopyRow(title: "Instance ID", value: account.t3InstanceID)
             SettingsDivider()
@@ -264,12 +277,16 @@ struct ProviderEditorView: View {
 
     @ViewBuilder
     private var t3Control: some View {
-        if t3Success {
+        if isSyncingT3 {
+            ProgressView().controlSize(.small)
+        } else if t3Success {
             SettingsCheck(title: HarnaisRuntime.t3UpdatedMessage)
         } else {
             switch t3Placement {
             case .nativeDefault:
-                SettingsCheck(title: "T3 already uses this login")
+                if !t3SignsInSeparately {
+                    SettingsCheck(title: "T3 already uses this login")
+                }
             case .merged:
                 HarnaisButton(title: "Update in T3 Code", action: onApplyT3)
             case .notMerged:
@@ -422,6 +439,16 @@ struct ProviderEditorView: View {
     }
 
     private var t3RowDescription: String {
+        if t3SignsInSeparately {
+            switch t3Placement {
+            case .nativeDefault:
+                return "T3 signs in to \(account.provider.displayName) itself. Sign in to its \(account.provider.displayName) provider with this account."
+            case .merged:
+                return "Listed in T3 as an extra profile. Sign in to it in T3 Settings → Providers."
+            case .notMerged:
+                return "Add this extra profile, then sign in to it in T3 Settings → Providers."
+            }
+        }
         switch t3Placement {
         case .nativeDefault:
             return "T3 already uses this as the default \(account.provider.displayName) login."
@@ -430,6 +457,75 @@ struct ProviderEditorView: View {
         case .notMerged:
             return "Add this extra profile. The default login stays as it is."
         }
+    }
+
+    @ViewBuilder
+    private var t3SignInControl: some View {
+        if t3SignIn != nil {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                if let onCancelT3SignIn {
+                    HarnaisButton(title: "Cancel", action: onCancelT3SignIn)
+                }
+            }
+        } else if t3SignsInSeparately, let onSignInT3 {
+            HarnaisButton(
+                title: t3Status?.auth == .authenticated ? "Sign in again…" : "Sign in…",
+                prominence: t3Status?.auth == .authenticated && !t3EmailMismatch ? .outline : .primary,
+                action: onSignInT3
+            )
+        } else if t3Status?.auth == .authenticated && !t3EmailMismatch {
+            SettingsCheck(title: "Signed in")
+        }
+    }
+
+    private var t3SignInDescription: String {
+        if let t3SignIn {
+            if let message = t3SignIn.message, !message.isEmpty { return message }
+            switch t3SignIn.phase {
+            case .waiting: return "Finish signing in in your browser."
+            case .verifying: return "Checking the sign-in…"
+            default: return "Starting sign-in in T3 Code…"
+            }
+        }
+        guard let t3Status else {
+            return t3SignsInSeparately
+                ? "T3 hasn't reported this provider yet. Sign in to use it in T3."
+                : "T3 hasn't reported this provider yet."
+        }
+        switch t3Status.auth {
+        case .authenticated:
+            guard let email = t3Status.email else { return "Signed in." }
+            if t3EmailMismatch, let expected = harnaisEmail {
+                return "T3 is signed in as \(email), not \(expected). Sign in again with this account."
+            }
+            return "Signed in as \(email)" + (t3Status.planLabel.map { " · \($0)" } ?? "") + "."
+        case .unauthenticated:
+            return t3SignsInSeparately ? "Not signed in. T3 keeps its own login for this provider." : "Not signed in."
+        case .unknown:
+            return "T3 couldn't tell whether this provider is signed in."
+        }
+    }
+
+    private var t3CheckedLabel: String? {
+        guard t3SignIn == nil, let checkedAt = t3Status?.checkedAt else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return "Checked \(formatter.localizedString(for: checkedAt, relativeTo: Date()))"
+    }
+
+    private var harnaisEmail: String? {
+        report.email ?? account.accountEmail
+    }
+
+    /// T3 signed in to a different account than this Harnais profile, e.g. the default Cursor login.
+    private var t3EmailMismatch: Bool {
+        guard t3Status?.auth == .authenticated,
+              let email = t3Status?.email?.trimmingCharacters(in: .whitespaces).lowercased(),
+              let expected = harnaisEmail?.trimmingCharacters(in: .whitespaces).lowercased(),
+              email.contains("@"), expected.contains("@")
+        else { return false }
+        return email != expected
     }
 
     private var t3JSONDescription: String {
