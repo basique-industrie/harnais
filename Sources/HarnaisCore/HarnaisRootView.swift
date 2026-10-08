@@ -78,6 +78,13 @@ public struct HarnaisRootView: View {
                         onReconnect: { reconnectConnection = $0 },
                         onRemove: { deletingConnection = $0 }
                     )
+                case .health:
+                    HealthPageView(runtime: runtime, onOpenAccount: { account in
+                        runtime.select(account)
+                        page = .account
+                    })
+                case .syncHistory:
+                    SyncHistoryPageView(runtime: runtime)
                 case .settings:
                     SettingsPageView(runtime: runtime)
                 case .about:
@@ -110,6 +117,9 @@ public struct HarnaisRootView: View {
         .environment(\.titlebarHeight, titlebarHeight)
         .toolbar(removing: .title)
         .toolbarBackgroundVisibility(.hidden, for: .windowToolbar)
+        .sheet(item: $runtime.t3Preview) { preview in
+            T3SyncPreviewSheet(runtime: runtime, preview: preview)
+        }
         .sheet(isPresented: $adding) {
             AddAccountSheet(
                 runtime: runtime,

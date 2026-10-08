@@ -4,6 +4,8 @@ import Observation
 
 enum HarnaisPage: Equatable {
     case overview
+    case health
+    case syncHistory
     case account
     case connections
     case skills
@@ -14,6 +16,10 @@ enum HarnaisPage: Equatable {
 
     func windowTitle(account: Account?) -> String {
         switch self {
+        case .health:
+            return "Account health — Harnais"
+        case .syncHistory:
+            return "Sync history — Harnais"
         case .about:
             return "About Harnais"
         case .settings:

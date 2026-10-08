@@ -42,6 +42,7 @@ public struct T3Exporter: Sendable {
     public var settingsURLs: [URL]
     public var homeDirectory: URL
     /// True only when every detected T3 build uses its own Cursor SDK login.
+    public var journal: T3SyncJournal?
     public var cursorUsesSDK: Bool
 
     /// Packaged T3 Code writes `~/.t3/userdata/settings.json`. Older guesses
@@ -52,6 +53,7 @@ public struct T3Exporter: Sendable {
         cursorUsesSDK: Bool? = nil
     ) {
         self.homeDirectory = homeDirectory
+        self.journal = T3SyncJournal()
         self.cursorUsesSDK = cursorUsesSDK ?? T3Installation.installed().usesOnlyCursorSDK
         settingsURLs = Self.existingSettingsURLs(home: homeDirectory, environment: environment)
     }
@@ -198,9 +200,10 @@ public struct T3Exporter: Sendable {
     /// stores sensitive values in its secret store. Falls back to editing the file when T3 is closed
     /// or its build cannot issue a session.
     @discardableResult
-    public func sync(accounts: [Account], changes: T3InstanceChanges = T3InstanceChanges()) async throws -> T3SyncRoute {
+    public func sync(accounts: [Account], changes: T3InstanceChanges = T3InstanceChanges(), expectations: [String: String] = [:]) async throws -> T3SyncRoute {
         let targets = settingsURLs.filter { FileManager.default.fileExists(atPath: $0.path) }
         guard !targets.isEmpty else { throw HarnaisError.t3SettingsMissing }
+        try T3SyncPreview.validate(expectations)
         var fileTargets: [URL] = []
         var route = T3SyncRoute.file
         for url in targets {
@@ -212,19 +215,23 @@ public struct T3Exporter: Sendable {
                 continue
             }
             do {
-                try await apply(accounts: accounts, changes: changes, through: server, settingsURL: url)
+                try await updateThroughServer(server, settingsURL: url, expectations: expectations) { current in
+                    try mergedProviderInstances(accounts: accounts, into: current, changes: changes)
+                }
                 route = .server
             } catch T3ServerError.unavailable {
                 fileTargets.append(url)
             }
         }
         if !fileTargets.isEmpty {
-            try apply(accounts: accounts, changes: changes, to: fileTargets)
+            try apply(accounts: accounts, changes: changes, to: fileTargets, expectations: expectations)
         }
         return route
     }
 
-    private func apply(accounts: [Account], changes: T3InstanceChanges, through server: T3Server, settingsURL: URL) async throws {
+    func updateThroughServer(_ server: T3Server, settingsURL: URL, expectations: [String: String] = [:],
+                             undoOf: UUID? = nil,
+                             transform: @Sendable @escaping ([String: Any]) throws -> [String: Any]) async throws {
         let serverVersion = await server.runtime.serverVersion()
         let legacy = T3SettingsUpdate.usesLegacyPatch(version: serverVersion ?? T3Build(appURL: server.appURL).version)
         try await server.withSession { session in
@@ -235,35 +242,46 @@ public struct T3Exporter: Sendable {
                   root["providerInstances"] == nil || root["providerInstances"] is [String: Any]
             else { throw T3ServerError.unavailable("T3 Code returned settings Harnais cannot read.") }
             let current = root["providerInstances"] as? [String: Any] ?? [:]
-            let merged = try mergedProviderInstances(accounts: accounts, into: current, changes: changes)
+            let merged = try transform(current)
             let changed = merged.keys.sorted().filter { id in
                 guard let after = merged[id] as? [String: Any] else { return false }
                 return (current[id] as? NSDictionary)?.isEqual(to: after) != true
             }
             guard !changed.isEmpty else { return }
-            if let original = try? Data(contentsOf: settingsURL) {
-                try backUp(original, of: settingsURL)
-            }
-            // Stable uses the same whole-map patch as its own UI, from this fresh
-            // server snapshot. Nightly updates one ID without replacing other IDs.
-            for id in legacy ? Array(changed.prefix(1)) : changed {
-                let mutation = T3SettingsUpdate.payload(instanceID: id, instances: merged, legacy: legacy)
-                do {
-                    let response = try await connection.request("server.updateSettings",
-                        payload: JSONSerialization.data(withJSONObject: mutation))
-                    guard let updated = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
-                          let actual = updated["providerInstances"] as? [String: Any],
-                          T3SettingsUpdate.changesLanded(
-                            before: legacy ? current : [id: current[id] ?? [:]],
-                            desired: legacy ? merged : [id: merged[id] ?? [:]], actual: actual)
-                    else {
-                        throw T3ServerError.rejected("T3 Code did not save the requested profile changes. Sync was cancelled; check T3 compatibility.")
-                    }
-                } catch T3ServerError.unavailable(let message) {
-                    // A dropped response does not prove the write failed. Never
-                    // fall back to a file edit after attempting a server mutation.
-                    throw T3ServerError.rejected(message)
+            try T3SyncPreview.validate(expectations.filter { $0.key == settingsURL.path })
+            var record = T3SyncRecord.make(before: current, after: merged, settingsURL: settingsURL, route: "server", undoOf: undoOf)
+            try journal?.save(record)
+            do {
+                if let original = try? Data(contentsOf: settingsURL) {
+                    try backUp(original, of: settingsURL)
                 }
+                // Stable uses the same whole-map patch as its own UI, from this fresh
+                // server snapshot. Nightly updates one ID without replacing other IDs.
+                for id in legacy ? Array(changed.prefix(1)) : changed {
+                    let mutation = T3SettingsUpdate.payload(instanceID: id, instances: merged, legacy: legacy)
+                    do {
+                        let response = try await connection.request("server.updateSettings",
+                            payload: JSONSerialization.data(withJSONObject: mutation))
+                        guard let updated = try? JSONSerialization.jsonObject(with: response) as? [String: Any],
+                              let actual = updated["providerInstances"] as? [String: Any],
+                              T3SettingsUpdate.changesLanded(
+                                before: legacy ? current : [id: current[id] ?? [:]],
+                                desired: legacy ? merged : [id: merged[id] ?? [:]], actual: actual)
+                        else {
+                            throw T3ServerError.rejected("T3 Code did not save the requested profile changes. Sync was cancelled; check T3 compatibility.")
+                        }
+                    } catch T3ServerError.unavailable(let message) {
+                        // A dropped response does not prove the write failed. Never
+                        // fall back to a file edit after attempting a server mutation.
+                        throw T3ServerError.rejected(message)
+                    }
+                }
+                record.status = .applied
+                try journal?.save(record)
+            } catch {
+                record.status = .failed
+                try? journal?.save(record)
+                throw error
             }
         }
     }
@@ -272,18 +290,27 @@ public struct T3Exporter: Sendable {
         try apply(accounts: accounts, changes: T3InstanceChanges(), to: targets)
     }
 
-    private func apply(accounts: [Account], changes: T3InstanceChanges, to targets: [URL]) throws {
+    private func apply(accounts: [Account], changes: T3InstanceChanges, to targets: [URL], expectations: [String: String] = [:]) throws {
         // Validate every destination before touching any of them.
         let writes = try targets.map { url in
             guard FileManager.default.fileExists(atPath: url.path) else { throw HarnaisError.t3SettingsMissing }
             let original = try Data(contentsOf: url)
             return (url: url, original: original, output: try mergedSettings(accounts: accounts, data: original, changes: changes))
         }.filter { $0.original != $0.output }
-        for change in writes {
-            try backUp(change.original, of: change.url)
+        try writeFiles(writes, expectations: expectations)
+    }
+
+    func writeFiles(_ writes: [(url: URL, original: Data, output: Data)], expectations: [String: String] = [:], undoOf: UUID? = nil) throws {
+        let paths = Set(writes.map { $0.url.path })
+        try T3SyncPreview.validate(expectations.filter { paths.contains($0.key) })
+        let records = try writes.map { change in
+            T3SyncRecord.make(before: try Self.instances(change.original), after: try Self.instances(change.output),
+                              settingsURL: change.url, route: "file", undoOf: undoOf)
         }
+        for record in records { try journal?.save(record) }
         var written: [(url: URL, original: Data, output: Data)] = []
         do {
+            for change in writes { try backUp(change.original, of: change.url) }
             for change in writes {
                 guard try Data(contentsOf: change.url) == change.original else {
                     throw HarnaisError.processFailed("T3 Code settings changed during sync. Try again.")
@@ -296,8 +323,11 @@ public struct T3Exporter: Sendable {
             for change in written.reversed() where (try? Data(contentsOf: change.url)) == change.output {
                 try? change.original.write(to: change.url, options: .atomic)
             }
+            for record in records { try? journal?.mark(record.id, status: .failed) }
             throw error
         }
+        // Once settings were saved, a journal failure must not roll back them.
+        for record in records { try journal?.mark(record.id, status: .applied) }
     }
 
     private func backUp(_ original: Data, of url: URL) throws {

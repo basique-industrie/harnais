@@ -29,6 +29,21 @@ struct HarnaisCLI {
             guard rest.count == 2 else { throw HarnaisError.processFailed("Expected a downloaded document path and MIME type.") }
             let value = try WhatsAppBridge().readDocument(path: rest[0], mime: rest[1])
             print(String(decoding: try JSONSerialization.data(withJSONObject: value), as: UTF8.self))
+        case "doctor":
+            let health = try AccountDoctor.collect(service: service)
+            if rest.contains("--json") {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                encoder.dateEncodingStrategy = .iso8601
+                print(String(decoding: try encoder.encode(health), as: UTF8.self))
+            } else {
+                for (index, account) in health.enumerated() {
+                    print("Account \(index + 1) (\(account.provider)): \(account.state.title)")
+                    for check in account.checks {
+                        print("  \(check.title): \(check.state.title) — \(check.detail)" + (check.nextStep.map { " " + $0 } ?? ""))
+                    }
+                }
+            }
         case "list":
             for account in try service.registry.accounts() {
                 let email = account.accountEmail ?? "unsigned"
@@ -120,9 +135,8 @@ struct HarnaisCLI {
             for account in try service.registry.accounts() {
                 print(try exporter.snippetJSON(for: account))
             }
-        case "t3-apply":
-            try T3Exporter().apply(accounts: service.registry.accounts())
-            print("merged providerInstances")
+        case "t3-apply", "t3-preview", "t3-history", "t3-undo":
+            try T3Command.run(command, arguments: rest, accounts: service.registry.accounts())
         case "iles-extension":
             let urls = try IlesExtensionInstaller().install()
             for url in urls { print(url.path) }
@@ -258,6 +272,7 @@ struct HarnaisCLI {
 
     static var help: String {
         """
+        harnais doctor [--json]
         harnais list
         harnais connections
         harnais inventory
@@ -272,7 +287,10 @@ struct HarnaisCLI {
         harnais path
         harnais quotas
         harnais t3-export
+        harnais t3-preview
         harnais t3-apply
+        harnais t3-history
+        harnais t3-undo <history-id> [--apply]
         harnais iles-extension
         harnais mcp apply
         harnais mcp serve <name>

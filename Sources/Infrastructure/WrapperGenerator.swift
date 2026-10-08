@@ -16,6 +16,13 @@ public struct WrapperGenerator: Sendable {
             attributes: [.posixPermissions: 0o700]
         )
         let url = identity.binDirectory.appendingPathComponent(account.wrapperName)
+        let body = Self.script(for: account, binaryPath: binaryPath)
+        try Data(body.utf8).write(to: url, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+        return url
+    }
+
+    public static func script(for account: Account, binaryPath: String) -> String {
         var lines = [
             "#!/bin/zsh",
             "set -euo pipefail",
@@ -25,10 +32,7 @@ public struct WrapperGenerator: Sendable {
             lines.append("export \(key)=\(ShellQuote.quote(expanded))")
         }
         lines.append("exec \(ShellQuote.quote(binaryPath)) \"$@\"")
-        let body = lines.joined(separator: "\n") + "\n"
-        try Data(body.utf8).write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
-        return url
+        return lines.joined(separator: "\n") + "\n"
     }
 
     public func refreshAll(accounts: [Account]) throws {

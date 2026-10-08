@@ -73,6 +73,8 @@ enum HarnaisSelfTests {
         try T3CursorSDKTests.run(root: root, expect: expect)
         try AccountColorTests.run(root: root, expect: expect)
         T3SettingsUpdateTests.run(expect: expect)
+        try T3RecoveryTests.run(root: root, expect: expect)
+        try AccountHealthTests.run(expect: expect)
         try CodexWeekTests.run(root: root, expect: expect)
         try TerminalCLITests.run(root: root, expect: expect)
         try OpenCodeTests.run(root: root, expect: expect)
