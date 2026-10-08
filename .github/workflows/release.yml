@@ -1,15 +1,7 @@
-# Publish a signed, notarized Harnais release for a tag.
-#
-# Harnais does not hold the Developer ID identity. Iles's release workflow
-# signs Harnais (product: harnais) on the trusted org Mac runner, behind
-# Iles's `release` environment, and keeps the result as the Harnais-notarized
-# artifact. This workflow starts that run, waits for it, verifies the
-# artifact and publishes it here, so a pushed tag needs no manual steps
-# beyond any approval the Iles environment requires.
-#
-# ILES_RELEASE_TOKEN: a fine-grained token for basique-industrie/iles with
-# Actions read and write, to dispatch the run and download its artifact.
+# All credentials belong to Harnais's protected `release` environment.
+# No personal token or cross-repository workflow dispatch is needed.
 name: Release
+run-name: Release ${{ inputs.tag || github.ref_name }}${{ inputs.dry_run && ' (validation only)' || '' }}
 
 on:
   push:
@@ -17,8 +9,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: The existing tag to release
+        description: Existing version tag to build (never move a published tag)
         required: true
+        type: string
+      dry_run:
+        description: Build, sign and notarize without changing the GitHub release
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -30,85 +27,95 @@ concurrency:
 jobs:
   release:
     if: github.repository == 'basique-industrie/harnais'
-    runs-on: ubuntu-latest
+    runs-on: macos-26
+    environment: release
     permissions:
       contents: write
-    timeout-minutes: 120
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
-
+      GH_REPO: basique-industrie/harnais
     steps:
+      # Keep release tooling from this workflow revision when retrying an older
+      # tag. The source checkout stays clean for scripts/release.sh.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          path: release-tools
+          persist-credentials: false
 
-      - name: Check the tag matches the app version
-        run: |
-          set -euo pipefail
-          version="$(python3 -c 'import plistlib; print(plistlib.load(open("Sources/HarnaisCore/Info.plist", "rb"))["CFBundleShortVersionString"])')"
-          [[ "$TAG" == "v$version" ]] || { echo "Tag $TAG does not match CFBundleShortVersionString $version." >&2; exit 1; }
-          echo "VERSION=$version" >> "$GITHUB_ENV"
-          if gh release view "$TAG" > /dev/null 2>&1; then
-            echo "Release $TAG already exists." >&2
-            exit 1
-          fi
+      - name: Validate tag input
+        working-directory: release-tools
+        run: python3 scripts/publish-release.py validate-tag "$TAG"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          path: source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check version, changelog and GitHub access
+        id: preflight
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run || false }}
+        run: python3 ../release-tools/scripts/publish-release.py preflight "$TAG"
 
-      - name: Sign and notarize in Iles
+      - uses: actions/setup-go@v5
+        if: ${{ steps.preflight.outputs.published != 'true' || inputs.dry_run }}
+        with:
+          go-version-file: source/Helpers/WhatsAppBridge/go.mod
+          cache-dependency-path: source/Helpers/WhatsAppBridge/go.sum
+
+      - name: Prepare signing credentials
+        if: ${{ steps.preflight.outputs.published != 'true' || inputs.dry_run }}
         env:
-          GH_TOKEN: ${{ secrets.ILES_RELEASE_TOKEN }}
+          APPLE_DEVELOPER_ID_APPLICATION_P12: ${{ secrets.APPLE_DEVELOPER_ID_APPLICATION_P12 }}
+          APPLE_DEVELOPER_ID_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_PASSWORD }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_KEY_ISSUER: ${{ secrets.APPLE_NOTARY_KEY_ISSUER }}
+          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
+          HARNAIS_NATIVE_OAUTH_CATALOG: ${{ secrets.HARNAIS_NATIVE_OAUTH_CATALOG }}
+        run: python3 ../release-tools/scripts/release-keychain.py prepare
+
+      - name: Build, test, sign and notarize the tagged source
+        if: ${{ steps.preflight.outputs.published != 'true' || inputs.dry_run }}
+        env:
+          NOTARY_PROFILE: harnais-release
         run: |
           set -euo pipefail
-          test -n "$GH_TOKEN" || { echo "Set the ILES_RELEASE_TOKEN secret." >&2; exit 1; }
-          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          # Newer API versions return the run; otherwise find it by dispatch time.
-          dispatch=(repos/basique-industrie/iles/actions/workflows/release.yml/dispatches
-            -f ref=main -f 'inputs[product]=harnais' -f "inputs[tag]=$TAG")
-          if ! response="$(gh api "${dispatch[@]}" -F return_run_details=true 2> /dev/null)"; then
-            response=""
-            gh api "${dispatch[@]}"
-          fi
-          run_id="$(jq -r '.workflow_run_id // empty' <<< "${response:-null}")"
-          for _ in $(seq 30); do
-            [[ -n "$run_id" ]] && break
-            sleep 10
-            run_id="$(gh api "repos/basique-industrie/iles/actions/workflows/release.yml/runs?event=workflow_dispatch&created=>=$started" \
-              --jq '.workflow_runs | sort_by(.created_at) | first | .id // empty')"
-          done
-          test -n "$run_id" || { echo "Could not find the Iles release run." >&2; exit 1; }
-          run_url="https://github.com/basique-industrie/iles/actions/runs/$run_id"
-          echo "ILES_RUN_ID=$run_id" >> "$GITHUB_ENV"
-          echo "Signing run: $run_url"
-          echo "Signing run: [$run_url]($run_url) (approve the \`release\` environment there if asked)" >> "$GITHUB_STEP_SUMMARY"
-          gh run watch "$run_id" -R basique-industrie/iles --interval 30 --exit-status > /dev/null
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          swift --version
+          ./scripts/release.sh
 
-      - name: Download and verify the notarized app
-        env:
-          GH_TOKEN: ${{ secrets.ILES_RELEASE_TOKEN }}
-        run: |
-          set -euo pipefail
-          gh run download "$ILES_RUN_ID" -R basique-industrie/iles -n Harnais-notarized -D dist
-          archive="Harnais-$VERSION-arm64.zip"
-          test -f "dist/$archive" && test -f "dist/$archive.sha256"
-          (cd dist && shasum -a 256 -c "$archive.sha256")
-          echo "ARCHIVE=dist/$archive" >> "$GITHUB_ENV"
+      - name: Remove signing credentials
+        if: always()
+        run: python3 ../release-tools/scripts/release-keychain.py cleanup
 
-      - name: Publish
+      - name: Preserve notarized artifacts
+        if: ${{ steps.preflight.outputs.published != 'true' || inputs.dry_run }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: Harnais-notarized-${{ inputs.tag || github.ref_name }}
+          path: |
+            source/dist/Harnais-*.zip
+            source/dist/Harnais-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify and publish
+        if: ${{ !inputs.dry_run && steps.preflight.outputs.published != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+        run: python3 ../release-tools/scripts/publish-release.py publish "$TAG"
+
+      - name: Record validation run
+        if: ${{ inputs.dry_run }}
         run: |
-          set -euo pipefail
-          notes="$(awk -v heading="## $VERSION " '
-            index($0, heading) == 1 { found = 1; next }
-            found && /^## / { exit }
-            found { print }
-          ' CHANGELOG.md)"
-          [[ -n "${notes//[[:space:]]/}" ]] || { echo "CHANGELOG.md has no ## $VERSION section." >&2; exit 1; }
-          printf 'Signed and notarized macOS app for Apple silicon. Requires macOS 26 or later.\n%s\n' "$notes" > "$RUNNER_TEMP/notes.md"
-          flags=(--title "Harnais $VERSION" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag)
-          # A dash is a prerelease channel (alpha/beta/rc). Do not mark it latest.
-          if [[ "$VERSION" == *-* ]]; then
-            flags+=(--prerelease)
-          fi
-          gh release create "$TAG" "${flags[@]}" "$ARCHIVE" "$ARCHIVE.sha256"
+          python3 ../release-tools/scripts/publish-release.py verify "$TAG"
+          echo "Signed and notarized $TAG. Artifacts are attached to this run; no release was changed." >> "$GITHUB_STEP_SUMMARY"

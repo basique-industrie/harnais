@@ -33,6 +33,12 @@ jobs:
       - name: Public source checks
         run: python3 scripts/check-public-release.py
 
+      - name: Release workflow regression tests
+        run: python3 scripts/test-release.py
+
+      - name: Validate GitHub workflows
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -shellcheck=
+
       - name: Test WhatsApp helper
         run: go test ./...
         working-directory: Helpers/WhatsAppBridge
