@@ -36,7 +36,7 @@ public struct AccountHealth: Codable, Sendable, Identifiable {
     /// values, local paths, emails or command output. Safe to copy for support.
     public static func evaluate(account: Account, report: ConnectionReport?,
                                 quota: AccountQuotaSnapshot?, quotaDate: Date?,
-                                placement: T3AccountPlacement, t3: T3ProviderStatus?,
+                                placement: T3AccountPlacement, t3: T3ProviderStatus?, hasT3Settings: Bool = true,
                                 wrapperReady: Bool, pathReady: Bool, syncDrift: Bool?,
                                 inventoryWarnings: Int?, inventoryDate: Date?, now: Date = Date()) -> AccountHealth {
         var checks: [AccountHealthCheck] = []
@@ -65,7 +65,11 @@ public struct AccountHealth: Codable, Sendable, Identifiable {
 
         switch placement {
         case .notMerged:
-            add("t3-sync", "T3 profile", .notUsed, "This account has not been added to T3.")
+            if hasT3Settings && syncDrift == nil {
+                add("t3-sync", "T3 profile", .unknown, "T3 settings could not be read; profile placement is unverified.", nil, "Open T3 and check its settings.")
+            } else {
+                add("t3-sync", "T3 profile", .notUsed, "This account has not been added to T3.")
+            }
         case .nativeDefault:
             add("t3-sync", "T3 profile", .ready, "Uses T3’s built-in provider slot.", now)
         case .merged:

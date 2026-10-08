@@ -38,6 +38,11 @@ enum AccountHealthTests {
         other = signedIn
         other.checkedAt = now.addingTimeInterval(-901)
         expect(evaluate(t3: other).checks.first { $0.id == "t3-login" }?.state == .unknown, "stale T3 identity is unverified")
+        let unreadable = AccountHealth.evaluate(account: account, report: ready, quota: quota, quotaDate: now,
+            placement: .notMerged, t3: nil, hasT3Settings: true, wrapperReady: true, pathReady: true,
+            syncDrift: nil, inventoryWarnings: nil, inventoryDate: nil, now: now)
+        expect(unreadable.checks.first { $0.id == "t3-sync" }?.state == .unknown, "unreadable T3 settings do not imply a profile was never added")
+        expect(unreadable.checks.first { $0.id == "connections" }?.state == .unknown, "failed inventory remains unverified")
         let diagnostic = String(decoding: try JSONEncoder().encode(evaluate()), as: UTF8.self)
         expect(!diagnostic.contains("@") && !diagnostic.contains("/private") && !diagnostic.contains("TOKEN"),
                "diagnostic output excludes emails, paths, labels and provider output")

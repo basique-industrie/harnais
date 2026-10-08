@@ -48,12 +48,13 @@ extension HarnaisRuntime {
 
     public func health(for account: Account, now: Date = Date()) -> AccountHealth {
         let placement = t3Placement(for: account)
-        let drift = try? T3Exporter().preview(accounts: [account]).hasChanges
+        let exporter = T3Exporter()
+        let drift = try? exporter.preview(accounts: [account]).hasChanges
         let inventory = connectionInventory.first { $0.accountID == account.id }
         let warnings = inventory.map { $0.warnings.count + $0.entries.reduce(0) { $0 + $1.warnings.count } }
         return AccountHealth.evaluate(account: account, report: reports[account.id],
             quota: feed.accounts.first { $0.id == account.id.uuidString }, quotaDate: lastQuotaCapturedAt,
-            placement: placement, t3: t3Status(for: account),
+            placement: placement, t3: t3Status(for: account), hasT3Settings: !exporter.settingsURLs.isEmpty,
             wrapperReady: AccountHealth.wrapperReady(account, identity: identity), pathReady: pathConfigured,
             syncDrift: drift, inventoryWarnings: warnings, inventoryDate: inventoryCheckedAt, now: now)
     }
