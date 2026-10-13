@@ -74,6 +74,7 @@ public struct AccountMetadata: Sendable {
     }
 
     public func appearsSignedIn(_ account: Account) -> Bool {
+        if account.provider == .codex, codexSessionExpired(account) { return false }
         if email(for: account) != nil { return true }
         switch account.provider {
         case .opencode:
@@ -109,11 +110,59 @@ public struct AccountMetadata: Sendable {
                 size: size.intValue
             )
         }
-        return CredentialSnapshot(files: files)
+        return CredentialSnapshot(files: files, identity: loginIdentity(for: account))
     }
 
     public func loginCompleted(_ account: Account, since baseline: CredentialSnapshot) -> Bool {
-        appearsSignedIn(account) && credentialSnapshot(for: account) != baseline
+        let current = credentialSnapshot(for: account)
+        guard appearsSignedIn(account), current != baseline else { return false }
+        // A token refresh rewrites the file but keeps the sign-in identity.
+        if let before = baseline.identity, let after = current.identity { return before != after }
+        return true
+    }
+
+    /// ChatGPT ends a Codex sign-in after a fixed lifetime; refreshes then fail and only a new
+    /// login helps, although `auth.json` still looks signed in.
+    public func codexSessionExpired(_ account: Account, now: Date = Date()) -> Bool {
+        guard let tokens = codexTokens(home: codexHome(account)),
+              let access = (tokens["access_token"] as? String).flatMap(JWTPayload.dictionary),
+              let expires = Self.claimDate(access["exp"]),
+              expires <= now
+        else { return false }
+        // Near the end of the sign-in, refreshed tokens are cut to the time left.
+        if let issued = Self.claimDate(access["iat"]), expires.timeIntervalSince(issued) < 600 { return true }
+        guard let id = (tokens["id_token"] as? String).flatMap(JWTPayload.dictionary),
+              let signedIn = Self.claimDate(id["auth_time"])
+        else { return false }
+        return now.timeIntervalSince(signedIn) >= Self.codexSessionLifetime
+    }
+
+    static let codexSessionLifetime: TimeInterval = 30 * 24 * 3600
+
+    /// Changes only when the user signs in again, not when tokens are refreshed.
+    private func loginIdentity(for account: Account) -> String? {
+        guard account.provider == .codex,
+              let tokens = codexTokens(home: codexHome(account)),
+              let id = (tokens["id_token"] as? String).flatMap(JWTPayload.dictionary),
+              let signedIn = Self.claimDate(id["auth_time"])
+        else { return nil }
+        return "\(tokens["account_id"] as? String ?? "")|\(signedIn.timeIntervalSince1970)"
+    }
+
+    private func codexHome(_ account: Account) -> String {
+        account.env["CODEX_HOME"] ?? account.shadowHomePath ?? account.homePath
+    }
+
+    private func codexTokens(home: String) -> [String: Any]? {
+        let auth = URL(fileURLWithPath: home).appendingPathComponent("auth.json")
+        guard let data = try? Data(contentsOf: auth),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return root["tokens"] as? [String: Any]
+    }
+
+    private static func claimDate(_ value: Any?) -> Date? {
+        (value as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
     }
 
     private func credentialURLs(for account: Account) -> [URL] {
@@ -205,8 +254,11 @@ public struct CredentialSnapshot: Equatable, Sendable {
     }
 
     public var files: [String: File]
+    /// Sign-in identity when the provider exposes one; see `AccountMetadata.loginCompleted`.
+    public var identity: String?
 
-    public init(files: [String: File] = [:]) {
+    public init(files: [String: File] = [:], identity: String? = nil) {
         self.files = files
+        self.identity = identity
     }
 }

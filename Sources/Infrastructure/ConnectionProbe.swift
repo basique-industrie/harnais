@@ -29,7 +29,8 @@ public struct ConnectionProbe: Sendable {
             authenticated: signedIn,
             email: email,
             authLabel: metadata.planLabel(for: account),
-            message: Self.unauthenticatedMessage(for: account.provider, signedIn: signedIn, installed: binary != nil)
+            message: Self.unauthenticatedMessage(for: account.provider, signedIn: signedIn, installed: binary != nil,
+                                                 expired: account.provider == .codex && metadata.codexSessionExpired(account))
         ).withConnectedAccounts(OpenCodeAccountReader.accounts(for: account))
     }
 
@@ -95,7 +96,8 @@ public struct ConnectionProbe: Sendable {
                     authenticated: diskSignedIn,
                     email: diskEmail,
                     authLabel: metadata.planLabel(for: account),
-                    message: Self.unauthenticatedMessage(for: account.provider, signedIn: diskSignedIn, installed: true),
+                    message: Self.unauthenticatedMessage(for: account.provider, signedIn: diskSignedIn, installed: true,
+                                                         expired: account.provider == .codex && metadata.codexSessionExpired(account)),
                     checkedAt: checkedAt
                 )
             case .cursor:
@@ -331,9 +333,11 @@ public struct ConnectionProbe: Sendable {
     private static func unauthenticatedMessage(
         for provider: ProviderKind,
         signedIn: Bool,
-        installed: Bool
+        installed: Bool,
+        expired: Bool = false
     ) -> String? {
         guard installed, !signedIn else { return nil }
+        if expired { return "\(provider.displayName) sign-in expired. Sign in again." }
         switch provider {
         case .claude:
             return "Claude Agent CLI is not authenticated. Run `claude auth login` and try again."

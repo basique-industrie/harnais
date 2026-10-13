@@ -11,6 +11,10 @@ enum RegistrationOwnershipTests {
         if let official {
             expect(official.isPublicClient == true && !official.clientId.isEmpty, "injected Google native product registration loads")
         }
+        let slack = try OfficialOAuthClients.record(for: .slack)
+        expect(slack?.clientId == "1726609315408.12162525640883", "Slack defaults to CLEYROP's Harnais Work app")
+        expect(slack?.isPublicClient == true && slack?.clientSecret == nil, "default Slack app is a public PKCE client")
+        expect(slack?.scopes?.count == 30, "default Slack app requests the Harnais Work scopes")
         let old = try JSONDecoder().decode(OAuthClientRecord.self, from: Data(#"{"clientId":"old","clientSecret":"secret"}"#.utf8))
         expect(old.isPublicClient == nil, "legacy custom clients retain confidential behavior")
         do {

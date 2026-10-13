@@ -115,6 +115,55 @@ enum AccountAuthenticationTests {
             metadata.loginCompleted(loginAccount, since: afterLogin) == false,
             "unchanged credentials are not a new login"
         )
+
+        let now = Date().timeIntervalSince1970
+        func writeCodexAuth(signedIn: TimeInterval, issued: TimeInterval, expires: TimeInterval, padding: String = "") throws {
+            let auth: [String: Any] = [
+                "tokens": [
+                    "id_token": unsignedJWT(["email": "ada@example.com", "auth_time": signedIn]),
+                    "access_token": unsignedJWT(["iat": issued, "exp": expires]),
+                    "account_id": "acct_123",
+                ],
+                "last_refresh": "\(issued)\(padding)",
+            ]
+            try JSONSerialization.data(withJSONObject: auth).write(to: loginHome.appendingPathComponent("auth.json"))
+        }
+        let day: TimeInterval = 24 * 3600
+        try writeCodexAuth(signedIn: now - 2 * day, issued: now - 3600, expires: now + 9 * day)
+        let beforeRefresh = metadata.credentialSnapshot(for: loginAccount)
+        try writeCodexAuth(signedIn: now - 2 * day, issued: now, expires: now + 10 * day, padding: "-refreshed")
+        expect(
+            metadata.loginCompleted(loginAccount, since: beforeRefresh) == false,
+            "a Codex token refresh is not a new login"
+        )
+        try writeCodexAuth(signedIn: now, issued: now, expires: now + 10 * day)
+        expect(
+            metadata.loginCompleted(loginAccount, since: beforeRefresh),
+            "a new Codex sign-in completes login"
+        )
+
+        try writeCodexAuth(signedIn: now - 30 * day, issued: now - 60, expires: now - 60)
+        expect(metadata.codexSessionExpired(loginAccount), "Codex tokens cut to the session end are expired")
+        expect(metadata.appearsSignedIn(loginAccount) == false, "an expired Codex session is not signed in")
+        let expiredReport = ConnectionProbe().snapshot(loginAccount)
+        expect(expiredReport.authenticated == false, "expired Codex session offers sign-in")
+        if expiredReport.installed {
+            expectEqual(expiredReport.detail, "Codex sign-in expired. Sign in again.", "expired Codex session message")
+        }
+        let expiredBaseline = metadata.credentialSnapshot(for: loginAccount)
+        try writeCodexAuth(signedIn: now, issued: now, expires: now + 10 * day)
+        expect(
+            metadata.loginCompleted(loginAccount, since: expiredBaseline),
+            "signing in after an expired Codex session completes login"
+        )
+
+        try writeCodexAuth(signedIn: now - 31 * day, issued: now - 11 * day, expires: now - day)
+        expect(metadata.codexSessionExpired(loginAccount), "Codex sign-in past its lifetime is expired")
+        try writeCodexAuth(signedIn: now - 5 * day, issued: now - 11 * day, expires: now - day)
+        expect(
+            metadata.codexSessionExpired(loginAccount) == false,
+            "an expired access token alone can still be refreshed"
+        )
         expectEqual(signedIn.versionLabel, "v1.2.3", "semver gets a v prefix")
         expectEqual(ConnectionReport.lastCheckedLabel(from: nil), "Check connection", "no last check")
 
