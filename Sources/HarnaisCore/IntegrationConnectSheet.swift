@@ -288,13 +288,21 @@ struct IntegrationReconnectSheet: View {
         VStack(alignment: .leading, spacing: HarnaisSheetMetrics.spacing) {
             HStack(spacing: 8) {
                 IntegrationMark(kind: connection.kind, size: 22)
-                Text("Sign in to \(connection.kind.displayName)")
+                Text("Renew \(connection.kind.displayName) access")
                     .font(HarnaisSheetMetrics.titleFont)
                     .foregroundStyle(HarnaisPalette.text)
             }
-            Text("A browser window will open. Finish \(connection.kind.displayName) sign-in, then this sheet closes.")
+            Text("A browser window will open. Sign in and allow the requested permissions. Harnais checks that access is complete before closing this sheet.")
                 .font(HarnaisSheetMetrics.subtitleFont)
                 .foregroundStyle(HarnaisPalette.label)
+            if connection.kind == .gmail {
+                Text("When Google asks, select access to your Gmail messages and settings.")
+                    .font(HarnaisType.control).foregroundStyle(HarnaisPalette.label)
+            }
+            if connection.kind == .gmail || connection.kind == .googleDrive {
+                Text("Google apps in Testing mode require a new authorization after seven days.")
+                    .font(HarnaisType.control).foregroundStyle(HarnaisPalette.label)
+            }
             if signingIn {
                 Text("Waiting for the browser…")
                     .font(HarnaisType.status)
@@ -309,7 +317,7 @@ struct IntegrationReconnectSheet: View {
                 Spacer(minLength: 0)
                 HarnaisButton(title: "Cancel") { loginCancellation?.cancel(); dismiss() }
                     .keyboardShortcut(.cancelAction)
-                HarnaisButton(title: signingIn ? "Waiting" : "Sign in", prominence: .primary, enabled: !signingIn) {
+                HarnaisButton(title: signingIn ? "Waiting" : "Renew access", prominence: .primary, enabled: !signingIn) {
                     start()
                 }
                 .keyboardShortcut(.defaultAction)
@@ -318,14 +326,16 @@ struct IntegrationReconnectSheet: View {
         .padding(HarnaisSheetMetrics.padding)
         .frame(width: 480)
         .background(HarnaisPalette.background)
-        .harnaisChrome(title: "Sign in", kind: .sheet)
+        .harnaisChrome(title: "Renew access", kind: .sheet)
         .toolbar(removing: .title)
         .onAppear(perform: start)
+        .onDisappear { loginCancellation?.cancel() }
     }
 
     private func start() {
         guard !signingIn else { return }
         signingIn = true
+        errorMessage = nil
         let connection = self.connection
         let cancellation = OAuthCancellation()
         loginCancellation = cancellation

@@ -174,10 +174,7 @@ public struct ConnectionInventoryReader: Sendable {
                 let secret = try store.load(for: connection)
                 switch secret {
                 case .oauth(let tokens):
-                    if tokens.accessToken.isEmpty { warnings.append("Shared login has no access token. Sign in again.") }
-                    if tokens.isExpired && (tokens.refreshToken ?? "").isEmpty {
-                        warnings.append("Shared login has expired. Sign in again.")
-                    }
+                    if let issue = OAuthPermissions.issue(for: connection.kind, tokens: tokens) { warnings.append(issue.message(for: connection.kind)) }
                 case .grafana(let tokens):
                     if tokens.token.isEmpty { warnings.append("Shared connection has no token.") }
                 }

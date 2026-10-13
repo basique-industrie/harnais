@@ -117,6 +117,11 @@ public struct MailMCPServer: Sendable {
                 tokens = try credentials.authorizedTokens(for: connection, rejectedAccessToken: tokens.accessToken, refresh: oauth.refresh)
                 continue
             }
+            if response.status == 401 || (response.status == 403 && OAuthPermissions.isInsufficientScope(response.data)) {
+                let issue: OAuthAuthorizationIssue = response.status == 401 ? .expired : .missingPermissions
+                try credentials.recordAuthorizationIssue(issue, for: connection, rejectedAccessToken: tokens.accessToken)
+                throw issue == .expired ? HarnaisError.oauthAccessExpired : HarnaisError.oauthPermissionsMissing(service.displayName)
+            }
             guard (200...299).contains(response.status) else {
                 throw HarnaisError.processFailed(response.status == 403
                     ? "\(service.displayName) denied mail access. Check consent and your organization's policy."

@@ -4,6 +4,12 @@ import Foundation
 import Infrastructure
 
 extension HarnaisRuntime {
+    public func authorizationIssue(for connection: IntegrationConnection) -> OAuthAuthorizationIssue? {
+        guard connection.kind.authKind == .oauth,
+              let tokens = try? integrations.credentials.load(for: connection).oauth else { return nil }
+        return OAuthPermissions.issue(for: connection.kind, tokens: tokens)
+    }
+
     public func applyMCP() {
         do {
             let report = try integrations.apply(accounts: accounts)

@@ -13,6 +13,7 @@ public struct OAuthTokenSet: Codable, Sendable, Equatable {
     public var scope: String?
     public var resource: String?
     public var idToken: String?
+    public var authorizationIssue: OAuthAuthorizationIssue?
 
     public init(
         clientId: String? = nil,
@@ -25,7 +26,8 @@ public struct OAuthTokenSet: Codable, Sendable, Equatable {
         tokenType: String = "Bearer",
         scope: String? = nil,
         resource: String? = nil,
-        idToken: String? = nil
+        idToken: String? = nil,
+        authorizationIssue: OAuthAuthorizationIssue? = nil
     ) {
         self.clientId = clientId
         self.clientSecret = clientSecret
@@ -38,6 +40,7 @@ public struct OAuthTokenSet: Codable, Sendable, Equatable {
         self.scope = scope
         self.resource = resource
         self.idToken = idToken
+        self.authorizationIssue = authorizationIssue
     }
 
     public var isExpired: Bool {
@@ -166,11 +169,36 @@ public struct IntegrationCredentialStore: Sendable {
             if let resource = tokens.resource, !OAuthResource.contains(endpoint: connection.mcpURL, resource: resource) {
                 throw HarnaisError.oauthFailed("This login belongs to a different server. Sign in again in Harnais.")
             }
+            if let issue = OAuthPermissions.issue(for: connection.kind, tokens: tokens) {
+                // An expired access token with no refresh token also needs interactive consent.
+                if tokens.authorizationIssue != issue {
+                    tokens.authorizationIssue = issue
+                    try saveUnlocked(.oauth(tokens), for: connection)
+                }
+                throw issue == .expired ? HarnaisError.oauthAccessExpired : HarnaisError.oauthPermissionsMissing(connection.kind.displayName)
+            }
             if tokens.isExpired || (rejectedAccessToken != nil && rejectedAccessToken == tokens.accessToken) {
-                tokens = try refresh(tokens)
+                do { tokens = try refresh(tokens) }
+                catch HarnaisError.oauthAccessExpired {
+                    tokens.authorizationIssue = .expired
+                    try saveUnlocked(.oauth(tokens), for: connection)
+                    throw HarnaisError.oauthAccessExpired
+                }
+                if let issue = OAuthPermissions.issue(for: connection.kind, tokens: tokens) {
+                    tokens.authorizationIssue = issue
+                    try saveUnlocked(.oauth(tokens), for: connection)
+                    throw issue == .expired ? HarnaisError.oauthAccessExpired : HarnaisError.oauthPermissionsMissing(connection.kind.displayName)
+                }
                 try saveUnlocked(.oauth(tokens), for: connection)
             }
             return tokens
+        }
+    }
+
+    public func recordAuthorizationIssue(_ issue: OAuthAuthorizationIssue, for connection: IntegrationConnection, rejectedAccessToken: String) throws {
+        _ = try updateOAuth(for: connection) { tokens in
+            // An old request must never invalidate a newer sign-in from another process.
+            if tokens.accessToken == rejectedAccessToken { tokens.authorizationIssue = issue }
         }
     }
 
