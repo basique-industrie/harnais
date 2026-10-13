@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.2 — 2026-10-13
+
+- Show expired or revoked shared OAuth access and missing permissions in Connections, with a Renew access action in the connection row and Manage.
+- Request the intended Gmail, Drive and Outlook permissions again when renewing access. Incomplete consent keeps the previous connection and explains which access must be granted.
+- Remember rejected refresh authorizations across coding-provider processes, avoid repeated failed refreshes, and prevent an old request from invalidating a newer sign-in. Temporary network errors do not require renewed consent.
+- Keep granted scopes when a token refresh omits them, and explain Google's seven-day authorization lifetime for apps in Testing mode in the renewal window.
+
 ## 0.4.1 — 2026-10-13
 
 - Show Codex accounts whose ChatGPT sign-in has expired as signed out, with a Sign in action, instead of reporting them as authenticated.
