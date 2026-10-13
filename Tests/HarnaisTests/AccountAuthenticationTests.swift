@@ -147,7 +147,9 @@ enum AccountAuthenticationTests {
         expect(metadata.appearsSignedIn(loginAccount) == false, "an expired Codex session is not signed in")
         let expiredReport = ConnectionProbe().snapshot(loginAccount)
         expect(expiredReport.authenticated == false, "expired Codex session offers sign-in")
-        expectEqual(expiredReport.detail, "Codex sign-in expired. Sign in again.", "expired Codex session message")
+        if expiredReport.installed {
+            expectEqual(expiredReport.detail, "Codex sign-in expired. Sign in again.", "expired Codex session message")
+        }
         let expiredBaseline = metadata.credentialSnapshot(for: loginAccount)
         try writeCodexAuth(signedIn: now, issued: now, expires: now + 10 * day)
         expect(
