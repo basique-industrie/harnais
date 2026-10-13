@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-10-13
+
+- Show Codex accounts whose ChatGPT sign-in has expired as signed out, with a Sign in action, instead of reporting them as authenticated.
+- Keep the sign-in window open until a new Codex login completes. Token refreshes by a running Codex session no longer close it early.
+- Connect Slack through CLEYROP's internal Harnais Work app by default, fixing `invalid_team_for_non_distributed_app` in the CLEYROP workspace. Other workspaces need their own app under Advanced.
+
 ## 0.4.0 — 2026-10-08
 
 - Added Account health for CLI and sign-in checks, account command routing, T3 identity and sync, quota freshness, and connection configuration.

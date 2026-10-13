@@ -5,7 +5,21 @@ import Foundation
 /// Google's installed-app client_secret is public native-client material, not a
 /// confidential web secret. Slack native PKCE clients must have no secret here.
 public enum OfficialOAuthClients {
+    /// CLEYROP's internal Harnais Work app (`A0C4SFFJURZ`, workspace `T01MCHX99C0`). Its native PKCE
+    /// client ID is public and it has no secret. Slack only accepts it in the CLEYROP workspace.
+    public static let slackHarnaisWork = OAuthClientRecord(
+        clientId: "1726609315408.12162525640883",
+        isPublicClient: true,
+        scopes: ["search:read.public", "search:read.private", "search:read.im", "search:read.mpim",
+                 "search:read.files", "search:read.users", "files:read", "channels:history", "groups:history",
+                 "im:history", "mpim:history", "users:read", "users:read.email", "emoji:read",
+                 "chat:write", "channels:write", "groups:write", "im:write", "mpim:write",
+                 "reactions:read", "reactions:write", "canvases:read", "canvases:write",
+                 "channels:read", "groups:read", "im:read", "mpim:read", "lists:read", "lists:write", "files:write"]
+    )
+
     public static func record(for kind: IntegrationKind, applicationBundle: Bundle = .main) throws -> OAuthClientRecord? {
+        if kind == .slack { return slackHarnaisWork }
         let executable = applicationBundle.executableURL?.deletingLastPathComponent()
         let roots = [applicationBundle.resourceURL, applicationBundle.bundleURL,
                      executable, executable?.appendingPathComponent("../Resources").standardizedFileURL].compactMap { $0 }
@@ -35,7 +49,7 @@ public enum OfficialOAuthClients {
         case .outlook: "Supports personal and work Microsoft accounts. Your organization may require administrator approval."
         case .gmail: "Gmail uses the Harnais Google app with read-only mail access. While Google verification is pending, sign-in is limited to approved test users."
         case .googleDrive: "Google currently limits Harnais sign-in to approved test users. Drive uses the stable API; no Developer Preview is required."
-        case .slack: "The Harnais Slack app is internal to its owner workspace. Other workspaces require Marketplace approval; use an approved custom app until then."
+        case .slack: "Uses CLEYROP's internal Harnais Work app, available only in the CLEYROP workspace. Other workspaces need their own internal app under Advanced."
         default: nil
         }
     }

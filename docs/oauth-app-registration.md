@@ -14,7 +14,7 @@ Updated 28 September 2026.
 | Google Drive | Harnais Desktop native client created in `harnais-mcp`, owned by the maintainer; Drive, Sheets, Docs and Slides APIs enabled | Testing; Google verification still applies. Stable Drive API adapter requires no preview eligibility |
 | Gmail | Same Harnais Desktop Google client; local read-only Gmail API adapter | Testing; restricted-scope review applies. No Gmail MCP preview requirement |
 | Outlook | Harnais public desktop app in CLEYROP Entra, supporting organizational and personal Microsoft accounts | User consent and tenant policy apply; publisher verification not completed |
-| Slack | Independent Harnais app `A0C4S9MENV9`; CLEYROP-owned Harnais Work app `A0C4SFFJURZ` | CLEYROP app has native PKCE, token rotation and MCP access enabled; shared read checks pass. Cross-workspace distribution still requires Marketplace approval |
+| Slack | Default: CLEYROP-owned Harnais Work app `A0C4SFFJURZ`, built into Harnais. Independent Harnais app `A0C4S9MENV9` is no longer the default | CLEYROP workspace only. CLEYROP app has native PKCE, token rotation and MCP access enabled; shared read checks pass. Cross-workspace distribution still requires Marketplace approval |
 | Atlassian | Automatic native registration during connection | User/site consent and organization policy apply |
 | Grafana | No OAuth app required | User supplies their organization's service-account token |
 
@@ -167,7 +167,7 @@ notice only when the corresponding milestone has actually been verified.
 
 ### CLEYROP work registration
 
-The main work connection uses internal app **Harnais Work**, app ID `A0C4SFFJURZ`, owned by CLEYROP `T01MCHX99C0`. Its public native client ID is `1726609315408.12162525640883`. It is stored separately as the local `slack:work` custom registration, with `isPublicClient: true` and no client secret. Its manifest is [slack-harnais-cleyrop.json](oauth-apps/slack-harnais-cleyrop.json).
+Harnais's default Slack registration and the main work connection use internal app **Harnais Work**, app ID `A0C4SFFJURZ`, owned by CLEYROP `T01MCHX99C0`. Its public native client ID is `1726609315408.12162525640883`. It is stored separately as the local `slack:work` custom registration, with `isPublicClient: true` and no client secret. Its manifest is [slack-harnais-cleyrop.json](oauth-apps/slack-harnais-cleyrop.json).
 
 Slack requires `settings.is_mcp_enabled: true` in addition to OAuth scopes and PKCE. Without that setting, OAuth succeeds but MCP initialization returns “App is not enabled for Slack MCP server access.” The CLEYROP app has this flag saved and verified by successful live MCP calls.
 

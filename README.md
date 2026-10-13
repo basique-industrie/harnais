@@ -39,7 +39,8 @@ Shared connections default to Harnais's product registration. Personal and Work 
 connection labels, not separate developer apps. Google's desktop client is bundled;
 public Google sign-in remains subject to OAuth verification. Drive uses the stable
 Drive, Sheets, Docs and Slides APIs and does not require MCP preview eligibility.
-Slack public distribution requires Marketplace approval. Atlassian registers
+Slack defaults to CLEYROP's internal Harnais Work app, which Slack only accepts
+in the CLEYROP workspace; other workspaces need their own app. Atlassian registers
 its native client automatically. Grafana uses a URL and service-account token.
 
 Advanced custom app settings retain existing Personal and Work registrations.
