@@ -12,6 +12,8 @@ public enum HarnaisError: Error, LocalizedError, Equatable, Sendable {
     case updateFailed(String)
     case oauthClientRequired(String)
     case oauthFailed(String)
+    case oauthAccessExpired
+    case oauthPermissionsMissing(String)
     case mcpServeUnknown(String)
     case grafanaBinaryMissing
     case callbackPortBusy
@@ -42,6 +44,10 @@ public enum HarnaisError: Error, LocalizedError, Equatable, Sendable {
             "\(name) needs an OAuth client in Harnais. Add the Client ID once, then sign in."
         case .oauthFailed(let message):
             message
+        case .oauthAccessExpired:
+            "The authorization has expired or been revoked. Open this connection in Harnais → Connections and choose Renew access."
+        case .oauthPermissionsMissing(let name):
+            "\(name) access was not fully granted. Choose Renew access in Harnais → Connections and allow the requested permissions in the browser."
         case .mcpServeUnknown(let name):
             "No Harnais connection named \(name). Open Connections and sign in."
         case .grafanaBinaryMissing:

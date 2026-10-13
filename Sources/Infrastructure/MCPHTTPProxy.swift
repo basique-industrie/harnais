@@ -105,7 +105,12 @@ private final class MCPHTTPBridge: NSObject, URLSessionDataDelegate, @unchecked 
             transfers[task.taskIdentifier] = Transfer(message: message, framing: framing, accessToken: tokens?.accessToken ?? "", retried: rejected != nil)
             task.resume()
         } catch {
-            fail(message, framing: framing, description: "Shared login is unavailable. Open this connection in Harnais and sign in again.")
+            let issue = error as? HarnaisError
+            let description: String
+            if issue == .oauthAccessExpired { description = error.localizedDescription }
+            else if let issue, case .oauthPermissionsMissing = issue { description = error.localizedDescription }
+            else { description = "Shared login is unavailable. Open this connection in Harnais and sign in again." }
+            fail(message, framing: framing, description: description)
         }
     }
 

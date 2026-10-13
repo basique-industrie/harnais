@@ -98,7 +98,7 @@ public struct MCPOAuthClient: Sendable {
             throw HarnaisError.oauthFailed("OAuth state did not match. Try signing in again.")
         }
         try cancellation?.check()
-        let tokens = try exchange(
+        var tokens = try exchange(
             mcpURL: URL(string: resource)!,
             metadata: discovery,
             clientId: clientId,
@@ -107,6 +107,8 @@ public struct MCPOAuthClient: Sendable {
             verifier: pkce.verifier,
             includeResource: kind != .outlook && kind != .gmail && kind != .googleDrive
         )
+        if tokens.scope == nil { tokens.scope = scopes.joined(separator: " ") }
+        try OAuthPermissions.validate(tokens, for: kind)
         try cancellation?.check()
         return tokens
     }
@@ -147,6 +149,7 @@ public struct MCPOAuthClient: Sendable {
         next.resource = tokens.resource ?? next.resource
         next.clientId = tokens.clientId
         next.clientSecret = tokens.clientSecret
+        next.scope = next.scope ?? tokens.scope
         return next
     }
 
@@ -337,15 +340,23 @@ public struct MCPOAuthClient: Sendable {
         fallbackClientId: String?,
         fallbackSecret: String?
     ) throws -> OAuthTokenSet {
+        let body = (try? JSONSerialization.jsonObject(with: response.data)) as? [String: Any]
+        if let error = body?["error"] as? String {
+            switch error {
+            case "invalid_grant": throw HarnaisError.oauthAccessExpired
+            case "invalid_client", "unauthorized_client":
+                throw HarnaisError.oauthFailed("The service rejected the OAuth app. Check its client settings in Harnais before signing in again.")
+            case "access_denied":
+                throw HarnaisError.oauthFailed("Authorization was not granted. Try again and allow the requested permissions in the browser.")
+            default:
+                throw HarnaisError.oauthFailed("The service rejected OAuth authorization (HTTP \(response.status)). Check the app settings and try again.")
+            }
+        }
         guard (200...299).contains(response.status) else {
             throw HarnaisError.oauthFailed("The token endpoint returned HTTP \(response.status). Check the OAuth app settings and sign in again.")
         }
-        guard let json = try JSONSerialization.jsonObject(with: response.data) as? [String: Any] else {
+        guard let json = body else {
             throw HarnaisError.oauthFailed("Token response was not JSON.")
-        }
-        if let error = json["error"] as? String, (json["ok"] as? Bool) != true {
-            let description = json["error_description"] as? String ?? error
-            throw HarnaisError.oauthFailed(description)
         }
         if let ok = json["ok"] as? Bool, ok == false {
             throw HarnaisError.oauthFailed(json["error"] as? String ?? "Slack sign-in failed.")

@@ -113,6 +113,10 @@ struct ConnectionsPageView: View {
                             Text("Not enabled for this account").font(HarnaisType.control).foregroundStyle(HarnaisPalette.label)
                         } else if !connection.isSignedIn {
                             Text("Sign in needed").font(HarnaisType.control).foregroundStyle(HarnaisPalette.warning)
+                        } else if let issue = runtime.authorizationIssue(for: connection) {
+                            Label(issue.title, systemImage: "exclamationmark.triangle")
+                                .font(HarnaisType.control).foregroundStyle(HarnaisPalette.warning)
+                            HarnaisButton(title: "Renew access", prominence: .primary) { onReconnect(connection) }
                         } else if runtime.connectionInventory.flatMap(\.entries).contains(where: { $0.origin == .shared && $0.name == connection.mcpName && !$0.actionableWarnings.isEmpty }) {
                             Label("Needs attention", systemImage: "exclamationmark.triangle")
                                 .font(HarnaisType.control).foregroundStyle(HarnaisPalette.warning)

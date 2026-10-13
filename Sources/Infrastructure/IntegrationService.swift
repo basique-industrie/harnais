@@ -200,11 +200,18 @@ public struct IntegrationService: Sendable {
         let saved = try clients.load().clients
         let keys = [connection.kind.rawValue, "\(connection.kind.rawValue):personal", "\(connection.kind.rawValue):work"]
         let matching = keys.compactMap { saved[$0] }.first { $0.clientId == clientID }
+        let scopes: [String]?
+        switch connection.kind {
+        case .gmail, .googleDrive, .outlook:
+            scopes = matching?.scopes ?? connection.kind.defaultScopes
+        default:
+            scopes = matching?.scopes ?? prior?.scope?.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
+        }
         return OAuthClientRecord(
             clientId: clientID,
             clientSecret: matching?.clientSecret ?? prior?.clientSecret,
             isPublicClient: matching?.isPublicClient,
-            scopes: matching?.scopes ?? prior?.scope?.split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
+            scopes: scopes
         )
     }
 

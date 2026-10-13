@@ -244,6 +244,11 @@ public struct DriveMCPServer: Sendable {
             request.setValue("Bearer \(tokens.accessToken)", forHTTPHeaderField: "Authorization")
             let response = try HTTPClient.send(request, timeout: 60, followRedirects: false, maxResponseBytes: 16 * 1024 * 1024)
             if response.status == 401 && attempt == 0 { tokens = try credentials.authorizedTokens(for: connection, rejectedAccessToken: tokens.accessToken, refresh: oauth.refresh); continue }
+            if response.status == 401 || (response.status == 403 && OAuthPermissions.isInsufficientScope(response.data)) {
+                let issue: OAuthAuthorizationIssue = response.status == 401 ? .expired : .missingPermissions
+                try credentials.recordAuthorizationIssue(issue, for: connection, rejectedAccessToken: tokens.accessToken)
+                throw issue == .expired ? HarnaisError.oauthAccessExpired : HarnaisError.oauthPermissionsMissing(connection.kind.displayName)
+            }
             return try GoogleWorkspaceTransport.payload(response, request: request)
         }
         throw HarnaisError.notLoggedIn

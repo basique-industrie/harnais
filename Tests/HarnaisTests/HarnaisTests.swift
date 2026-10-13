@@ -65,6 +65,7 @@ enum HarnaisSelfTests {
         try WhatsAppConnectionTests.run(root: root, expect: expect)
         try ConnectionAvailabilityTests.run(root: root, expect: expect)
         try SharedConnectionTests.run(root: root, expect: expect)
+        try OAuthRecoveryTests.run(root: root, expect: expect)
         try ConnectionInventoryTests.run(root: root, expect: expect)
         try ConnectionLifecycleTests.run(root: root, expect: expect)
         try SkillLibraryTests.run(root: root, expect: expect)

@@ -1,5 +1,24 @@
 # Diagnosis and recovery
 
+## Renew a shared connection's access
+
+In **Connections**, expired or revoked OAuth authorizations show **Access expired**;
+incomplete consent shows **Permissions missing**. Choose **Renew access** on the
+connection or in **Manage**. Sign in in the browser and allow the requested service
+permissions. For Gmail, select access to your messages and settings.
+
+Harnais requests the service's intended permissions again, validates the consent,
+and keeps the previous credentials if the new consent is incomplete. Rejected
+refresh authorizations remain visible across coding-provider processes and are
+not repeatedly retried. A temporary network error does not mark access expired.
+
+Google OAuth apps in **Testing** mode issue refresh authorizations lasting seven
+days. Renewing access restores the connection; the app owner must move the Google
+project out of Testing for longer-lived authorizations. Harnais cannot extend an
+expired Google authorization without browser consent.
+
+## Account health
+
 Account health brings together CLI availability, local sign-in data, isolated
 command routing and PATH, T3 profile settings and identity, usage freshness,
 and local connection configuration. Checks older than 15 minutes are marked

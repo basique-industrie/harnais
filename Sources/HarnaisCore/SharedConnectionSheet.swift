@@ -51,7 +51,8 @@ struct SharedConnectionSheet: View {
     }
     private var isDirty: Bool { savedDraft.map { $0 != draft } ?? false }
     private var reconnectTitle: String {
-        isDirty ? "Save and reconnect" : current.isSignedIn ? "Reconnect" : "Sign in"
+        if current.kind.authKind == .oauth { return isDirty ? "Save and renew access" : "Renew access" }
+        return isDirty ? "Save and reconnect" : current.isSignedIn ? "Reconnect" : "Sign in"
     }
     private var current: IntegrationConnection { runtime.connections.first { $0.id == connection.id } ?? connection }
     private var validation: ConnectionValidationStore.Report? { ConnectionValidationStore().report(for: current) }
@@ -73,7 +74,7 @@ struct SharedConnectionSheet: View {
                 }
                 Spacer()
                 if connection.kind.authKind == .oauth || connection.kind == .aikido || connection.kind == .whatsapp {
-                    HarnaisButton(title: reconnectTitle, prominence: current.isSignedIn ? .outline : .primary, enabled: !saving) {
+                    HarnaisButton(title: reconnectTitle, prominence: current.isSignedIn && runtime.authorizationIssue(for: current) == nil ? .outline : .primary, enabled: !saving) {
                         if isDirty { save(after: .reconnect) }
                         else { onReconnect(current) }
                     }
@@ -133,7 +134,7 @@ struct SharedConnectionSheet: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let identity = current.accountLabel { LabeledContent("Signed in as", value: identity) }
-            LabeledContent("Connection", value: current.excludedFromApply ? "Sharing paused" : current.isSignedIn ? "Connected" : "Sign-in required")
+            LabeledContent("Connection", value: current.excludedFromApply ? "Sharing paused" : runtime.authorizationIssue(for: current)?.title ?? (current.isSignedIn ? "Connected" : "Sign-in required"))
             LabeledContent("Name") { TextField("Display name", text: $label).textFieldStyle(.roundedBorder).frame(maxWidth: 320) }
             Toggle("Enable sharing", isOn: $shared).toggleStyle(.switch)
             Text("Choose which accounts can use this connection in Accounts. Pausing sharing keeps those choices.")
