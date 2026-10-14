@@ -166,6 +166,18 @@ public struct HarnaisRootView: View {
                         deletingConnection = nil
                     }
                 )
+            } else if let prompt = runtime.resetPrompt {
+                HarnaisConfirmDialog(
+                    title: prompt.plan.dialogTitle,
+                    message: prompt.plan.dialogMessage(),
+                    confirmTitle: prompt.plan.blocker == nil ? "Use reset" : nil,
+                    cancelTitle: prompt.plan.blocker == nil ? "Cancel" : "Close",
+                    confirmRole: nil,
+                    details: AnyView(ResetPlanRows(rows: prompt.plan.detailRows())),
+                    footnote: prompt.plan.blocker == nil ? "This can't be undone." : nil,
+                    onCancel: { runtime.cancelResetCredit() },
+                    onConfirm: { runtime.confirmResetCredit() }
+                )
             } else if let account = runtime.t3SignInPrompt {
                 HarnaisConfirmDialog(
                     title: "Sign in to Cursor in T3 Code?",

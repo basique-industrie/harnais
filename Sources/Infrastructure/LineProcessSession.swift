@@ -25,7 +25,12 @@ public final class LineProcessSession: @unchecked Sendable {
         try stdin.fileHandleForWriting.write(contentsOf: Data("\n".utf8))
     }
 
-    public func waitForResult(id: Int, timeout: TimeInterval) throws -> [String: Any] {
+    public func waitForResult(
+        id: Int,
+        timeout: TimeInterval,
+        failureMessage: String = "Codex could not read its usage limits.",
+        earlyExitMessage: String = "Codex stopped before reporting its limits."
+    ) throws -> [String: Any] {
         let deadline = ProcessInfo.processInfo.systemUptime + timeout
         while ProcessInfo.processInfo.systemUptime < deadline {
             var start = buffer.startIndex
@@ -44,7 +49,7 @@ public final class LineProcessSession: @unchecked Sendable {
             if start != buffer.startIndex { buffer.removeSubrange(..<start) }
             if let json = pending.removeValue(forKey: id) {
                 if let result = json["result"] as? [String: Any] { return result }
-                if json["error"] != nil { throw HarnaisError.processFailed("Codex could not read its usage limits.") }
+                if json["error"] != nil { throw HarnaisError.processFailed(failureMessage) }
             }
             var descriptor = pollfd(fd: stdout.fileHandleForReading.fileDescriptor, events: Int16(POLLIN), revents: 0)
             let remaining = deadline - ProcessInfo.processInfo.systemUptime
@@ -52,7 +57,7 @@ public final class LineProcessSession: @unchecked Sendable {
             if ready <= 0 { continue }
             let available = stdout.fileHandleForReading.availableData
             guard !available.isEmpty else {
-                throw HarnaisError.processFailed("Codex stopped before reporting its limits.")
+                throw HarnaisError.processFailed(earlyExitMessage)
             }
             buffer.append(available)
             guard buffer.count <= 4 * 1024 * 1024 else {

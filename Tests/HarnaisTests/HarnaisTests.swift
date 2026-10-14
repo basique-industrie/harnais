@@ -81,6 +81,7 @@ enum HarnaisSelfTests {
         try OpenCodeTests.run(root: root, expect: expect)
         try OpenCodeAccountDetailsTests.run(root: root, expect: expect)
         try ResetCreditsTests.run(expect: expect)
+        try ResetRedemptionTests.run(root: root, expect: expect)
         UsagePresentationTests.run(expect: expect)
 
         let isolation = IsolationEngine(

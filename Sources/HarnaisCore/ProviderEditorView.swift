@@ -24,6 +24,9 @@ struct ProviderEditorView: View {
     let onOpenSkills: () -> Void
     let onRemove: () -> Void
     var resetCredits: ResetCredits?
+    var onUseReset: (() -> Void)?
+    var isUsingReset = false
+    var resetBlocker: String?
     var onStartWeek: (() -> Void)?
     var isStartingWeek = false
     var weekStartMessage: String?
@@ -327,6 +330,9 @@ struct ProviderEditorView: View {
                         provider: account.provider,
                         quotas: quotas,
                         resetCredits: resetCredits,
+                        onUseReset: isRefreshingLimits ? nil : onUseReset,
+                        isUsingReset: isUsingReset,
+                        resetBlocker: resetBlocker,
                         now: context.date
                     )
                 }

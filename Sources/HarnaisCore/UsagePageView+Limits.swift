@@ -47,6 +47,8 @@ extension UsagePageView {
                     provider: pool.provider,
                     title: window.title,
                     members: window.members,
+                    onUseReset: { runtime.prepareResetCredit($0) },
+                    resetBlocker: { runtime.resetBlocker(for: $0) },
                     now: now
                 )
             }

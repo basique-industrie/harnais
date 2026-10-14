@@ -5,9 +5,11 @@ import SwiftUI
 struct HarnaisConfirmDialog: View {
     let title: String
     let message: String
-    var confirmTitle = "Delete"
+    var confirmTitle: String? = "Delete"
     var cancelTitle = "Cancel"
     var confirmRole: ButtonRole? = .destructive
+    var details: AnyView? = nil
+    var footnote: String? = nil
     let onCancel: () -> Void
     let onConfirm: () -> Void
 
@@ -24,18 +26,29 @@ struct HarnaisConfirmDialog: View {
                         .font(HarnaisType.status)
                         .foregroundStyle(HarnaisPalette.label)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let details {
+                        details.padding(.top, 8)
+                    }
+                    if let footnote {
+                        Text(footnote)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(HarnaisPalette.warning)
+                            .padding(.top, 4)
+                    }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     Spacer(minLength: 0)
                     HarnaisButton(title: cancelTitle, action: onCancel)
-                    HarnaisButton(
-                        title: confirmTitle,
-                        role: confirmRole,
-                        prominence: .primary,
-                        action: onConfirm
-                    )
+                    if let confirmTitle {
+                        HarnaisButton(
+                            title: confirmTitle,
+                            role: confirmRole,
+                            prominence: .primary,
+                            action: onConfirm
+                        )
+                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)

@@ -202,15 +202,38 @@ public struct AccountMetadata: Sendable {
         let url = URL(fileURLWithPath: configDir).appendingPathComponent(".claude.json")
         let homeFallback = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json")
         for candidate in [url, homeFallback] {
-            guard let data = try? Data(contentsOf: candidate),
-                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let oauth = root["oauthAccount"] as? [String: Any],
+            guard let oauth = Self.oauthAccount(at: candidate),
                   let email = oauth["emailAddress"] as? String,
                   !email.isEmpty
             else { continue }
             return email
         }
         return nil
+    }
+
+    /// Organization this Claude login belongs to. Read only from the account's own
+    /// config directory: a reset must never be addressed to another profile's organization.
+    public func claudeOrganizationID(for account: Account) -> String? {
+        let directory = account.env["CLAUDE_CONFIG_DIR"] ?? defaultClaudeDir(account)
+        var candidates = [URL(fileURLWithPath: directory).appendingPathComponent(".claude.json")]
+        // The imported default login keeps its profile in ~/.claude.json, beside ~/.claude.
+        if account.importedDefault {
+            candidates.append(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude.json"))
+        }
+        for url in candidates {
+            guard let id = Self.oauthAccount(at: url)?["organizationUuid"] as? String,
+                  id.range(of: "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$", options: .regularExpression) != nil
+            else { continue }
+            return id
+        }
+        return nil
+    }
+
+    private static func oauthAccount(at url: URL) -> [String: Any]? {
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+        return root["oauthAccount"] as? [String: Any]
     }
 
     private func codexEmail(home: String) -> String? {
