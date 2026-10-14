@@ -6,6 +6,10 @@ struct AccountUsageDetails: View {
     let provider: ProviderKind
     let quotas: [FeedQuota]
     var resetCredits: ResetCredits?
+    var onUseReset: (() -> Void)?
+    var isUsingReset = false
+    /// Set while the weekly quota is not empty: the reset is shown but cannot be used.
+    var resetBlocker: String?
     let now: Date
 
     var body: some View {
@@ -20,11 +24,18 @@ struct AccountUsageDetails: View {
                         bankLabel(resetCredits)
                         Spacer(minLength: 8)
                         bankExpiry(resetCredits)
+                        useButton(resetCredits)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 8) {
                         bankLabel(resetCredits)
                         bankExpiry(resetCredits)
+                        useButton(resetCredits)
                     }
+                }
+                if let resetBlocker, onUseReset != nil {
+                    Text(resetBlocker)
+                        .font(.system(size: 11))
+                        .foregroundStyle(HarnaisPalette.label)
                 }
             }
         }
@@ -71,7 +82,15 @@ struct AccountUsageDetails: View {
         Text(credits.caption)
             .font(.system(size: 12, weight: .medium))
             .foregroundStyle(HarnaisPalette.text)
-            .help("Banked resets are redeemed manually and are separate from scheduled usage resets.")
+            .help("Banked resets are spent only when you confirm, and are separate from scheduled usage resets.")
+    }
+
+    @ViewBuilder
+    private func useButton(_ credits: ResetCredits) -> some View {
+        if credits.availableCount > 0, let onUseReset {
+            HarnaisButton(title: isUsingReset ? "Checking…" : "Use reset…", prominence: .primary, enabled: !isUsingReset && resetBlocker == nil, action: onUseReset)
+                .help(resetBlocker ?? "Checks live limits first. Nothing is spent until you confirm.")
+        }
     }
 
     @ViewBuilder

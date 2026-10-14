@@ -18,6 +18,10 @@ public final class HarnaisRuntime {
     public var isRefreshingQuotas = false
     public internal(set) var startingCodexWeeks: Set<UUID> = []
     public internal(set) var codexWeekStates: [String: CodexWindowState] = [:]
+    /// Accounts whose banked reset is being checked or redeemed.
+    public internal(set) var busyResets: Set<UUID> = []
+    /// Fresh plan awaiting the user's confirmation. Nothing is spent until it is confirmed.
+    public internal(set) var resetPrompt: ResetPrompt?
     public var isRefreshingUsage = false
     public var isCheckingConnection = false
     public internal(set) var checkingAccounts: Set<UUID> = []

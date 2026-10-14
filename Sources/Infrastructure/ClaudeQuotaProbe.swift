@@ -30,12 +30,12 @@ public struct ClaudeQuotaProbe: Sendable {
         return ProbeResult(email: email, quotas: quotas)
     }
 
-    private func probeAPI(account: Account, environment: [String: String]) throws -> ProbeResult {
+    /// Same identity Claude Code presents, so the usage and reset endpoints treat Harnais as the CLI.
+    func authorizedRequest(url: URL, method: String, account: Account, environment: [String: String]) throws -> URLRequest {
         guard let token = ClaudeCredentials.accessToken(account: account, environment: environment, runner: runner)
         else { throw HarnaisError.notLoggedIn }
-
-        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1")!)
-        request.httpMethod = "GET"
+        var request = URLRequest(url: url)
+        request.httpMethod = method
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         if let binary = BinaryLocator.resolve(.claude, override: account.binaryPath),
@@ -44,6 +44,14 @@ public struct ClaudeQuotaProbe: Sendable {
             request.setValue("claude-cli/\(version) (external, cli)", forHTTPHeaderField: "User-Agent")
         }
         request.timeoutInterval = 15
+        return request
+    }
+
+    private func probeAPI(account: Account, environment: [String: String]) throws -> ProbeResult {
+        var request = try authorizedRequest(
+            url: URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1")!,
+            method: "GET", account: account, environment: environment
+        )
         var (body, status) = try HTTPClient.getBlocking(request)
         // An optional credit query must not prevent regular limits from loading.
         if status != 200 {

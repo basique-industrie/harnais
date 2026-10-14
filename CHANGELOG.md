@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-10-14
+
+- Use a banked reset for Claude and Codex accounts from the account page or by clicking the ticket badge in Usage → Limits. Use reset… reads live limits, shows what will be spent and which limits it clears, and spends nothing until you confirm.
+- Offer a banked reset only once the weekly quota is empty. Until then the button and ticket badge are disabled with the reason, and the confirmation re-checks live limits before anything is spent. A reset is also blocked when no credit is left or, for Claude, when the grant is paused, expired, cooling down or only usable at a limit.
+- Show the cost, credit, limits cleared, current usage and expiry as labelled rows in the confirmation, with a hover state on the ticket badge.
+- Retries are safe: each attempt keeps one request key until the provider gives a final answer, so a dropped connection cannot spend a second reset.
+
 ## 0.4.2 — 2026-10-13
 
 - Show expired or revoked shared OAuth access and missing permissions in Connections, with a Renew access action in the connection row and Manage.

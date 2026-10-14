@@ -12,6 +12,10 @@ struct QuotaRemainingMeter: View {
     let title: String
     var resetCaption: String? = nil
     var resetCredits: ResetCredits? = nil
+    /// Makes the banked-reset badge a button. The action only opens the confirmation.
+    var onUseReset: (() -> Void)? = nil
+    /// Why the badge cannot be used yet. Shown in its tooltip.
+    var resetBlocker: String? = nil
     var now: Date = Date()
     var help: String = ""
 
@@ -46,13 +50,7 @@ struct QuotaRemainingMeter: View {
                             }
                             if let resetCredits, resetCredits.availableCount > 0 {
                                 if resetCaption != nil { Text("·").foregroundStyle(HarnaisPalette.tertiary) }
-                                HStack(spacing: 3) {
-                                    LucideIcon(glyph: .ticket, size: 12, tint: .labelColor)
-                                    Text("\(resetCredits.availableCount)")
-                                }
-                                    .fontWeight(.semibold)
-                                    .help([resetCredits.caption, resetCredits.expiryCaption(now: now)]
-                                        .compactMap { $0 }.joined(separator: " · "))
+                                creditBadge(resetCredits)
                             }
                         }
                         .font(.system(size: 11).monospacedDigit())
@@ -77,10 +75,46 @@ struct QuotaRemainingMeter: View {
         .accessibilityLabel(["\(title), \(Self.remainingCaption(clamped)) left", resetCaption,
                              resetCredits?.caption, resetCredits?.expiryCaption(now: now)]
             .compactMap { $0 }.joined(separator: ", "))
+        .accessibilityAction(named: "Use banked reset") { onUseReset?() }
+    }
+
+    @ViewBuilder
+    private func creditBadge(_ credits: ResetCredits) -> some View {
+        let badge = HStack(spacing: 3) {
+            LucideIcon(glyph: .ticket, size: 12, tint: .labelColor)
+            Text("\(credits.availableCount)")
+        }
+        .fontWeight(.semibold)
+        let details = [credits.caption, credits.expiryCaption(now: now)].compactMap { $0 }.joined(separator: " · ")
+        if let onUseReset, resetBlocker == nil {
+            ResetBadgeButton(action: onUseReset) { badge }
+                .help(details + " · Click to use one. Nothing is spent until you confirm.")
+        } else {
+            badge.help([details, resetBlocker].compactMap { $0 }.joined(separator: " · "))
+        }
     }
 
     static func remainingCaption(_ remaining: Double) -> String {
         remaining <= 0 ? "Empty" : "\(Int(remaining.rounded()))%"
+    }
+}
+
+/// Badge-sized button: highlights on hover so it reads as clickable inside the meter.
+private struct ResetBadgeButton<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder let label: () -> Label
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            label()
+                .padding(.horizontal, 4)
+                .padding(.vertical, 1)
+                .background(hovering ? HarnaisPalette.hairline : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -133,6 +167,8 @@ struct LimitPoolCard: View {
     let provider: ProviderKind
     let title: String
     let members: [LimitPoolMember]
+    var onUseReset: ((Account) -> Void)? = nil
+    var resetBlocker: (Account) -> String? = { _ in nil }
     var now: Date = Date()
 
     var body: some View {
@@ -197,6 +233,8 @@ struct LimitPoolCard: View {
             title: chipLabel,
             resetCaption: UsageFormat.compactReset(member.quota, now: now),
             resetCredits: provider == .claude && member.quota.windowKind != .weekly ? nil : member.resetCredits,
+            onUseReset: onUseReset.map { open in { open(member.account) } },
+            resetBlocker: resetBlocker(member.account),
             now: now,
             help: "\(chipLabel): \(Int(remaining.rounded()))% left, \(Int(member.quota.usedPercent.rounded()))% used. Bar is quota left."
         )
