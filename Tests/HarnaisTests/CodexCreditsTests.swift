@@ -41,7 +41,20 @@ enum CodexCreditsTests {
         expect(zero.codexCredits?.balanceLabel == "0", "explicit lack of credits displays zero")
         expect(CodexCredits(hasCredits: true, unlimited: true, balance: "0").balanceLabel == "Unlimited", "unlimited takes precedence over balance")
         expect(CodexCredits(hasCredits: true, unlimited: false).balanceLabel == "Available", "availability without a balance does not invent an amount")
-        expect(expected.balanceLabel == "1234.50", "balance preserves precision without inventing a currency")
+        let english = Locale(identifier: "en_US")
+        let french = Locale(identifier: "fr_FR")
+        func formatted(_ balance: String, locale: Locale = Locale(identifier: "en_US")) -> String {
+            CodexCredits(hasCredits: true, unlimited: false, balance: balance).formattedBalance(locale: locale)
+        }
+        expect(expected.formattedBalance(locale: english) == "1,234.5", "credits group thousands and omit unnecessary trailing zeros")
+        expect(formatted("59705.1154555000") == "59,705.12", "long provider balance rounds to two decimals")
+        expect(formatted("59705.1154555000", locale: french) == "59\u{202F}705,12", "credits use local grouping and decimal separators")
+        expect(formatted("1000.000000") == "1,000", "whole balances omit the decimal portion")
+        expect(formatted("999.999") == "1,000", "rounding carries into the integer portion")
+        expect(formatted("0.0001") == "< 0.01", "small available balances do not appear depleted")
+        expect(formatted("0.0001", locale: french) == "< 0,01", "small balance threshold is localized")
+        expect(formatted("0.01000") == "0.01" && formatted("0.0000") == "0", "threshold and zero remain exact")
+        expect(expected.balance == "1234.50", "display formatting preserves the cached provider precision")
 
         let decoder = JSONDecoder()
         let legacy = try decoder.decode(AccountQuotaSnapshot.self, from: Data(#"{"id":"old","provider":"codex","label":"Old","quotas":[]}"#.utf8))

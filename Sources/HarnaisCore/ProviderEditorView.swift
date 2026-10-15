@@ -354,8 +354,11 @@ struct ProviderEditorView: View {
         SettingsSection(title: "Codex credits") {
             SettingsRow(title: "Available credits", description: "Extra usage beyond your plan’s limits.") {
                 Text(codexCredits?.balanceLabel ?? (isRefreshingLimits ? "Loading…" : "Not reported"))
-                    .font(HarnaisType.rowTitle.monospacedDigit())
+                    .font(.system(size: codexCredits == nil ? 14 : 20, weight: .semibold).monospacedDigit())
                     .foregroundStyle(codexCredits == nil ? HarnaisPalette.label : HarnaisPalette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(1)
                     .textSelection(.enabled)
             }
         }
