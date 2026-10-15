@@ -24,6 +24,7 @@ struct ProviderEditorView: View {
     let onOpenSkills: () -> Void
     let onRemove: () -> Void
     var resetCredits: ResetCredits?
+    var codexCredits: CodexCredits?
     var onUseReset: (() -> Void)?
     var isUsingReset = false
     var resetBlocker: String?
@@ -68,6 +69,7 @@ struct ProviderEditorView: View {
                 case .overview:
                     if showsSignIn || !report.installed { identity }
                     limits
+                    if account.provider == .codex { extraCredits }
                     connectionsAndSkills
                     if account.provider == .opencode { connectedAccounts }
                 case .settings:
@@ -344,6 +346,20 @@ struct ProviderEditorView: View {
                     HarnaisButton(title: isStartingWeek ? "Starting…" : "Start week") { onStartWeek?() }
                         .disabled(isStartingWeek || isRefreshingLimits)
                 }
+            }
+        }
+    }
+
+    private var extraCredits: some View {
+        SettingsSection(title: "Codex credits") {
+            SettingsRow(title: "Available credits", description: "Extra usage beyond your plan’s limits.") {
+                Text(codexCredits?.balanceLabel ?? (isRefreshingLimits ? "Loading…" : "Not reported"))
+                    .font(HarnaisType.rowTitle.monospacedDigit())
+                    .foregroundStyle(codexCredits == nil ? HarnaisPalette.label : HarnaisPalette.text)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .layoutPriority(1)
+                    .textSelection(.enabled)
             }
         }
     }

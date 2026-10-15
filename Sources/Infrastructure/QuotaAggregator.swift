@@ -78,7 +78,8 @@ public struct QuotaAggregator: Sendable {
                     email: result.email ?? JWTPayload.mailbox(account.accountEmail),
                     quotas: quotas,
                     error: result.error,
-                    resetCredits: result.resetCredits
+                    resetCredits: result.resetCredits,
+                    codexCredits: result.codexCredits
                 )
             )
         }

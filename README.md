@@ -156,6 +156,11 @@ filter on it. The Iles probe fetches quotas and harness sync state together
 Harnesses = Claude, Codex, Cursor, T3. Islands = Iles rings.
 Limits = live quotas. Spend = local cost/token estimates.
 
+Codex accounts show their available extra usage credits only in the account's
+**Overview** tab. The balance refreshes with usage limits and stays separate from
+banked resets. If Codex does not report credits, the view says **Not reported**.
+These are Codex credit units, not the OpenAI API platform's billing balance.
+
 Provider CLI credentials stay in vendor stores. Connection tokens for Drive,
 Slack, Grafana, and Atlassian are stored by Harnais (mode 0600) so every
 harness can share one login. Do not commit those files.

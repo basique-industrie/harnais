@@ -21,6 +21,7 @@ public struct AccountQuotaSnapshot: Codable, Sendable, Equatable, Identifiable {
     public var quotas: [FeedQuota]
     public var error: String?
     public var resetCredits: ResetCredits?
+    public var codexCredits: CodexCredits?
 
     public init(
         id: String,
@@ -29,7 +30,8 @@ public struct AccountQuotaSnapshot: Codable, Sendable, Equatable, Identifiable {
         email: String? = nil,
         quotas: [FeedQuota] = [],
         error: String? = nil,
-        resetCredits: ResetCredits? = nil
+        resetCredits: ResetCredits? = nil,
+        codexCredits: CodexCredits? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -38,6 +40,7 @@ public struct AccountQuotaSnapshot: Codable, Sendable, Equatable, Identifiable {
         self.quotas = quotas
         self.error = error
         self.resetCredits = resetCredits
+        self.codexCredits = codexCredits
     }
 }
 
@@ -91,11 +94,13 @@ public struct ProbeResult: Sendable, Equatable {
     public var quotas: [ProbeQuota]
     public var error: String?
     public var resetCredits: ResetCredits?
+    public var codexCredits: CodexCredits?
 
-    public init(email: String? = nil, quotas: [ProbeQuota] = [], error: String? = nil, resetCredits: ResetCredits? = nil) {
+    public init(email: String? = nil, quotas: [ProbeQuota] = [], error: String? = nil, resetCredits: ResetCredits? = nil, codexCredits: CodexCredits? = nil) {
         self.email = email
         self.quotas = quotas
         self.error = error
         self.resetCredits = resetCredits
+        self.codexCredits = codexCredits
     }
 }

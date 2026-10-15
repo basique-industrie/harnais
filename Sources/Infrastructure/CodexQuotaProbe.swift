@@ -58,7 +58,8 @@ public struct CodexQuotaProbe: Sendable {
     public static func parseResponse(_ response: [String: Any], planType: String? = nil, now: Date = Date()) -> ProbeResult {
         ProbeResult(
             quotas: parseRateLimits(response, planType: planType, now: now),
-            resetCredits: ResetCreditsParser.codex(response["rateLimitResetCredits"])
+            resetCredits: ResetCreditsParser.codex(response["rateLimitResetCredits"]),
+            codexCredits: parseCredits(snapshot(in: response))
         )
     }
 
@@ -67,16 +68,38 @@ public struct CodexQuotaProbe: Sendable {
     private static let monthMins = 30.0 * 24 * 60
 
     public static func parseRateLimits(_ rateLimits: [String: Any], planType: String? = nil, now: Date = Date()) -> [ProbeQuota] {
+        parseSnapshot(snapshot(in: rateLimits), planType: planType, now: now)
+    }
+
+    private static func snapshot(in rateLimits: [String: Any]) -> [String: Any] {
         if let byId = rateLimits["rateLimitsByLimitId"] as? [String: Any]
             ?? rateLimits["rate_limits_by_limit_id"] as? [String: Any],
            let codex = byId["codex"] as? [String: Any] {
-            return parseSnapshot(codex, planType: planType, now: now)
+            return codex
         }
         if let nested = rateLimits["rateLimits"] as? [String: Any]
             ?? rateLimits["rate_limits"] as? [String: Any] {
-            return parseSnapshot(nested, planType: planType, now: now)
+            return nested
         }
-        return parseSnapshot(rateLimits, planType: planType, now: now)
+        return rateLimits
+    }
+
+    private static func parseCredits(_ snapshot: [String: Any]) -> CodexCredits? {
+        if let limitID = snapshot["limitId"] as? String ?? snapshot["limit_id"] as? String,
+           limitID != "codex" { return nil }
+        guard let block = snapshot["credits"] as? [String: Any],
+              JSONSerialization.isValidJSONObject(block),
+              let data = try? JSONSerialization.data(withJSONObject: block)
+        else { return nil }
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        guard var credits = try? decoder.decode(CodexCredits.self, from: data) else { return nil }
+        if let balance = credits.balance {
+            let trimmed = balance.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil else { return nil }
+            credits.balance = trimmed
+        }
+        return credits
     }
 
     private static func parseSnapshot(_ snapshot: [String: Any], planType: String?, now: Date) -> [ProbeQuota] {
