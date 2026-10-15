@@ -43,6 +43,7 @@ struct AccountListView: View {
                 onOpenSkills: { onOpenSkills(account) },
                 onRemove: { onRemove(account) },
                 resetCredits: runtime.resetCredits(for: account),
+                codexCredits: runtime.codexCredits(for: account),
                 onUseReset: { runtime.prepareResetCredit(account) },
                 isUsingReset: runtime.busyResets.contains(account.id),
                 resetBlocker: runtime.resetBlocker(for: account),

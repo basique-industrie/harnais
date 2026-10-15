@@ -53,6 +53,11 @@ extension HarnaisRuntime {
         feed.accounts.first { $0.id == account.id.uuidString }?.resetCredits
     }
 
+    public func codexCredits(for account: Account) -> CodexCredits? {
+        guard account.provider == .codex else { return nil }
+        return feed.accounts.first { $0.id == account.id.uuidString }?.codexCredits
+    }
+
     public func quotaError(for account: Account) -> String? {
         feed.accounts.first { $0.id == account.id.uuidString }?.error
     }
