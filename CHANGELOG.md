@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 — 2026-10-15
+
+- Show available extra usage credits in the Overview tab of OpenAI/Codex accounts, separate from subscription limits and banked resets. Credits refresh with usage limits; unavailable balances are shown as not reported.
+- Format credit balances with local thousands and decimal separators, at most two decimal places, and the same text size as the account card. Small positive balances remain visible instead of rounding to zero.
+
 ## 0.5.0 — 2026-10-14
 
 - Use a banked reset for Claude and Codex accounts from the account page or by clicking the ticket badge in Usage → Limits. Use reset… reads live limits, shows what will be spent and which limits it clears, and spends nothing until you confirm.
