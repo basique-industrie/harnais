@@ -13,7 +13,7 @@ extension HarnaisRuntime {
     /// The confirmation re-checks with live data before anything is spent.
     public func resetBlocker(for account: Account) -> String? {
         guard let credits = resetCredits(for: account), credits.availableCount > 0 else { return nil }
-        return ResetPlan.weeklyGate(quotas(for: account).map {
+        return ResetPlan.blocker(provider: account.provider, availableCount: credits.availableCount, windows: quotas(for: account).map {
             ResetPlan.Window(name: $0.compactTitle ?? $0.type, percentRemaining: $0.percentRemaining)
         })
     }

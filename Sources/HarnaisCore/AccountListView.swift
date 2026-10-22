@@ -58,7 +58,7 @@ struct AccountListView: View {
                 isSyncingT3: runtime.isSyncingT3,
                 onSignInT3: { runtime.signInToT3(account) },
                 onCancelT3SignIn: { runtime.cancelT3SignIn(account) },
-                errorMessage: runtime.errorMessage,
+                errorMessage: runtime.errorMessage ?? runtime.quotaError(for: account),
                 successMessage: runtime.didUpdateT3 ? nil : runtime.successMessage,
                 onColorChange: { runtime.setColor($0, managesT3: $1, for: account) }
             )

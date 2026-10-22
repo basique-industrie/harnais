@@ -5,7 +5,7 @@ import Infrastructure
 
 extension HarnaisRuntime {
     public func refreshQuotas() {
-        guard !isRefreshingQuotas, startingCodexWeeks.isEmpty else { return }
+        guard !isRefreshingQuotas, startingCodexWeeks.isEmpty, busyResets.isEmpty else { return }
         isRefreshingQuotas = true
         errorMessage = nil
         let accounts = self.accounts
