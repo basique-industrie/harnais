@@ -138,6 +138,42 @@ enum ClaudeUsageClientTests {
         expect(try fallback.fetchUsage(request).quotas.first?.percentRemaining == 0 && fallbackCalls.total == 2,
                "servers without the optional credit query still support the plain usage endpoint")
 
+        for status in [400, 404] {
+            let compatibilityDirectory = root.appendingPathComponent("claude-usage-compatibility-\(status)")
+            let compatibilityCalls = Calls()
+            let transport: ClaudeUsageClient.Transport = { request in
+                _ = compatibilityCalls.next()
+                return request.url?.query == nil ? (data, 200, nil) : (Data(), status, nil)
+            }
+            let firstClient = ClaudeUsageClient(cacheDirectory: compatibilityDirectory, transport: transport)
+            let firstProbe = ClaudeQuotaProbe(http: { try firstClient.send($0) })
+            _ = try firstProbe.fetchUsage(request)
+            let secondClient = ClaudeUsageClient(cacheDirectory: compatibilityDirectory, transport: transport)
+            let secondProbe = ClaudeQuotaProbe(http: { try secondClient.send($0) })
+            expect(try secondProbe.fetchUsage(request).quotas.first?.percentRemaining == 0 && compatibilityCalls.total == 2,
+                   "a new process reuses a rejected optional query (\(status)) and its successful plain fallback")
+            _ = try secondClient.send(request, now: Date().addingTimeInterval(301))
+            expect(compatibilityCalls.total == 3, "optional query support is checked again after the cache expires")
+        }
+
+        // State created by the earlier fix has no status field and must still be reusable.
+        let legacyDirectory = root.appendingPathComponent("claude-usage-legacy")
+        let legacyCalls = Calls()
+        let legacy = ClaudeUsageClient(cacheDirectory: legacyDirectory) { _ in
+            _ = legacyCalls.next()
+            return (data, 200, nil)
+        }
+        _ = try legacy.send(request, now: now)
+        let legacyFile = try FileManager.default.contentsOfDirectory(at: legacyDirectory, includingPropertiesForKeys: nil)
+            .first { $0.pathExtension == "json" }!
+        var legacyState = try JSONSerialization.jsonObject(with: Data(contentsOf: legacyFile)) as! [String: Any]
+        var legacyResponses = legacyState["responses"] as! [String: [String: Any]]
+        for key in Array(legacyResponses.keys) { legacyResponses[key]?.removeValue(forKey: "status") }
+        legacyState["responses"] = legacyResponses
+        try JSONSerialization.data(withJSONObject: legacyState).write(to: legacyFile)
+        expect(try legacy.send(request, now: now.addingTimeInterval(1)).1 == 200 && legacyCalls.total == 1,
+               "existing successful cache entries remain usable after upgrading")
+
         let unavailableCalls = Calls()
         let unavailable = ClaudeQuotaProbe(http: { _ in
             _ = unavailableCalls.next()

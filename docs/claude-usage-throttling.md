@@ -64,6 +64,9 @@ potentially unconfirmed operation: retain its idempotency key and check before r
 - Successful provider responses are reused for up to five minutes for regular refreshes.
   A reset plan accepts a response younger than sixty seconds and re-evaluates expiry
   and grant eligibility against the current time. An older response requires a new GET.
+- Rejections of optional query parameters (400/404) use the same cache lifetime, so
+  the compatibility fallback does not send a failed GET on every cached refresh.
+  Other failures are not cached as successful usage.
 - `Retry-After` is shared by refresh and preflight. Manual clicks cannot bypass it.
   Missing, zero, invalid or past values use a five-minute wait; repeated 429s without
   a valid deadline increase that to ten, twenty, then thirty minutes. These are local

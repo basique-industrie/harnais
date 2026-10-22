@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.2 — 2026-10-22
+
+- Coordinate Claude usage checks across Harnais and its command-line helper, including calls from Iles. Reuse recent readings and share retry deadlines to reduce repeated requests and HTTP 429 errors.
+- Keep the last known limits and banked-reset count visible when a Claude usage check fails, with a clear warning. A throttled check no longer retries immediately, replaces usage with older CLI values, or asks you to sign in again.
+- Let Claude's grant eligibility decide when a banked reset can be used, including before the weekly allowance reaches 0%. Confirmation, expiry checks and safe retries still apply; Codex's weekly-limit policy is unchanged.
+- Document usage throttling, Iles integration paths and troubleshooting in the Claude usage guide.
+
 ## 0.5.1 — 2026-10-15
 
 - Show available extra usage credits in the Overview tab of OpenAI/Codex accounts, separate from subscription limits and banked resets. Credits refresh with usage limits; unavailable balances are shown as not reported.

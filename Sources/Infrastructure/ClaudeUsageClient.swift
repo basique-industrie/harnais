@@ -14,6 +14,8 @@ public final class ClaudeUsageClient: @unchecked Sendable {
     private struct Cached: Codable {
         var data: Data
         var fetchedAt: Date
+        // Older state files only stored successful responses.
+        var status: Int?
     }
 
     private struct State: Codable {
@@ -42,16 +44,20 @@ public final class ClaudeUsageClient: @unchecked Sendable {
             if let until = state.retryAt, until > checkedAt { return (Data(), 429) }
             if let cached = state.responses[key], cached.fetchedAt <= checkedAt,
                checkedAt.timeIntervalSince(cached.fetchedAt) < maximumAge {
-                return (cached.data, 200)
+                return (cached.data, cached.status ?? 200)
             }
             let response = try transport(request)
             // Retry-After starts when the response arrives, not before a slow request.
             let receivedAt = now ?? Date()
             if response.status == 200,
                (try? JSONSerialization.jsonObject(with: response.data)) is [String: Any] {
-                state.responses[key] = Cached(data: response.data, fetchedAt: receivedAt)
+                state.responses[key] = Cached(data: response.data, fetchedAt: receivedAt, status: 200)
                 state.retryAt = nil
                 state.consecutiveLimits = 0
+            } else if response.status == 400 || response.status == 404 {
+                // Remember rejected optional parameters too; otherwise every refresh still
+                // sends a failed GET before finding the plain endpoint's cached response.
+                state.responses[key] = Cached(data: response.data, fetchedAt: receivedAt, status: response.status)
             } else if response.status == 429 {
                 state.responses.removeAll()
                 state.consecutiveLimits = min(state.consecutiveLimits + 1, 4)
