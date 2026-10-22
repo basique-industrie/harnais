@@ -5,9 +5,10 @@ Harnais shows an account's banked resets and can redeem one from the account pag
 
 ## Flow
 
-1. **Plan** (read-only). Live limits and the next credit are fetched, never taken from the cache.
-2. **Gate.** A reset is offered only when the weekly quota (`7d`, else the plan window) is at 0%.
-   The cached limits disable the button early; the live plan decides before anything is spent.
+1. **Plan** (read-only). Limits and the next credit come from a provider response no older than
+   sixty seconds, shared with recent refreshes. The persisted quota feed is never used as a plan.
+2. **Gate.** Codex keeps the local empty-week policy (`7d`, else the plan window). Claude uses
+   its provider grant flags, expiry and cooldown; a displayed 1% does not disable an eligible reset.
 3. **Confirm.** The dialog lists the cost, credit, limits cleared, current usage and expiry. A plan
    with a blocker offers only Close. Return does not confirm; Escape cancels.
 4. **Redeem.** One request with a stored idempotency key, then a limits refresh.
@@ -32,6 +33,9 @@ Claude Code update.
   timeout or an `unavailable` answer and retired on a final one, so a retry returns "already
   redeemed" instead of spending again. If a key cannot be stored, nothing is sent.
 - Claude is addressed to the organization in the account's own `.claude.json`, never another profile's.
+- Usage checks share a cache and retry deadline across GUI and CLI processes. A preflight 429
+  spends nothing; a consume transport failure remains unconfirmed and keeps the idempotency key.
+  See [usage throttling and Iles](claude-usage-throttling.md) for the limits and recovery behavior.
 
 ## Testing
 

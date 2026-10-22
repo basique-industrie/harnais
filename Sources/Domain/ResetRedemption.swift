@@ -1,7 +1,7 @@
 import Foundation
 
 /// A fresh, read-only description of the banked reset Harnais would redeem.
-/// Built from live provider data right before confirmation, never from the cache.
+/// Built from a recent provider response before confirmation, never from the persisted quota feed.
 public struct ResetPlan: Sendable, Equatable {
     public struct Window: Sendable, Equatable {
         public var name: String
@@ -42,11 +42,11 @@ public struct ResetPlan: Sendable, Equatable {
         self.expiresAt = expiresAt
         self.clears = clears
         self.windows = windows
-        self.blocker = blocker ?? Self.blocker(availableCount: availableCount, windows: windows)
+        self.blocker = blocker ?? Self.blocker(provider: provider, availableCount: availableCount, windows: windows)
     }
 
-    /// Harnais only offers a banked reset once the weekly quota is empty. Spending one earlier
-    /// wastes most of it, and credits are rare. `windows` may hold cached or live usage.
+    /// Codex's local weekly-quota policy. Claude eligibility comes from its grant flags,
+    /// which can allow a reset before any quota is empty.
     public static func weeklyGate(_ windows: [Window]) -> String? {
         let weekly = windows.filter { $0.name.lowercased() == "7d" }
         let longer = windows.filter { $0.name.lowercased() != "5h" }
@@ -57,8 +57,9 @@ public struct ResetPlan: Sendable, Equatable {
         return "Available once the \(quota) quota is empty. \(open.name) has \(Int(open.percentRemaining.rounded()))% left."
     }
 
-    static func blocker(availableCount: Int, windows: [Window]) -> String? {
-        availableCount <= 0 ? "No banked reset is available." : weeklyGate(windows)
+    public static func blocker(provider: ProviderKind, availableCount: Int, windows: [Window]) -> String? {
+        if availableCount <= 0 { return "No banked reset is available." }
+        return provider == .claude ? nil : weeklyGate(windows)
     }
 
     public var dialogTitle: String {
@@ -93,7 +94,7 @@ public struct ResetPlan: Sendable, Equatable {
     }
 
     public func dialogMessage() -> String {
-        blocker ?? "The weekly quota is empty. This credit restores it."
+        blocker ?? "This spends one banked reset to restore the limits shown below."
     }
 }
 

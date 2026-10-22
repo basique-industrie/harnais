@@ -48,6 +48,9 @@ enum ResetRedemptionTests {
         expect(ResetPlan.weeklyGate([.init(name: "30d", percentRemaining: 10)])?.contains("plan quota") == true, "monthly plans gate on the plan quota")
         expect(ResetPlan.weeklyGate([]) == nil, "unknown usage is left to the live check")
         expect(ResetPlan(provider: .codex, availableCount: 0, windows: []).blocker != nil, "zero credits block the reset")
+        expect(ResetPlan.blocker(provider: .claude, availableCount: 1, windows: [.init(name: "7d", percentRemaining: 1)]) == nil,
+               "the cached Claude button does not gate an expiring reset on rounded usage")
+        expect(ResetPlan(provider: .claude, availableCount: 0).blocker != nil, "Claude still requires an available credit")
         let unused = partly
 
         // MARK: Codex
@@ -144,14 +147,14 @@ enum ResetRedemptionTests {
         expect(usageRecorder.requests.count == 1 && usageRecorder.requests[0].httpMethod == "GET", "Claude planning is a single GET")
         expect(claudePlan.blocker == nil && claudePlan.creditID == "next", "an at-limit Claude account can use its next grant")
         expect(claudePlan.clears == ["5h", "7d"], "plan names the limits the grant clears")
-        expect(claudePlan.windows.map(\.name) == ["5h", "7d", "opus"], "plan shows every limit, so the weekly gate sees the weekly quota")
+        expect(claudePlan.windows.map(\.name) == ["5h", "7d", "opus"], "plan shows every limit before confirmation")
 
         func blocker(_ edits: [String: Any] = [:], block: [String: Any] = [:]) throws -> String? {
             try claude(Recorder(), usage: offer(edits, block: block)) { throw Dropped() }
                 .plan(for: claudeAccount, environment: [:], now: now).blocker
         }
         expect(try blocker(block: ["at_limit": false])?.contains("reached a limit") == true, "a limit-only grant waits for a limit")
-        expect(try blocker(["use_requires_limit": false], block: ["at_limit": false]) == nil, "an anytime grant is usable once the weekly quota is empty")
+        expect(try blocker(["use_requires_limit": false], block: ["at_limit": false]) == nil, "an anytime grant does not require a reached limit")
         expect(try blocker(["paused": true]) != nil, "a paused grant is blocked")
         expect(try blocker(["usable_now": false]) != nil, "a not-yet-usable grant is blocked")
         expect(try blocker(["ends_at": "2026-10-01T00:00:00Z"]) != nil, "an expired grant is blocked")
@@ -165,8 +168,24 @@ enum ResetRedemptionTests {
         partlyUsed["seven_day"] = ["utilization": 34]
         let partialPlan = try claude(Recorder(), usage: JSONSerialization.data(withJSONObject: partlyUsed)) { throw Dropped() }
             .plan(for: claudeAccount, environment: [:], now: now)
-        expect(partialPlan.blocker?.contains("weekly quota is empty") == true && partialPlan.blocker?.contains("66%") == true,
-               "Claude with weekly allowance left is blocked even when its grant is usable")
+        expect(partialPlan.blocker == nil, "Claude's at-limit flag is authoritative even with weekly allowance remaining")
+        var almostUsed = try JSONSerialization.jsonObject(with: offer(["use_requires_limit": false], block: ["at_limit": false])) as! [String: Any]
+        almostUsed["seven_day"] = ["utilization": 99]
+        let expiringPlan = try claude(Recorder(), usage: JSONSerialization.data(withJSONObject: almostUsed)) { throw Dropped() }
+            .plan(for: claudeAccount, environment: [:], now: now)
+        expect(expiringPlan.blocker == nil && expiringPlan.windows.first(where: { $0.name == "7d" })?.percentRemaining == 1,
+               "an anytime Claude reset remains usable at 1% without falsifying the usage")
+        expect(!expiringPlan.dialogMessage().contains("quota is empty"), "confirmation does not falsely describe the quota as empty")
+
+        let preflight429 = ResetCreditRedeemer(attempts: store, http: { _ in (Data(), 429) },
+            claudeRequest: { _, _, url, _ in URLRequest(url: url) })
+        do {
+            _ = try preflight429.plan(for: claudeAccount, environment: [:], now: now)
+            expect(false, "a rate-limited preflight cannot produce a redeemable plan")
+        } catch {
+            expect(error.localizedDescription.contains("No reset was sent") && !error.localizedDescription.contains("Sign in"),
+                   "a preflight 429 explains throttling, not an authentication failure")
+        }
 
         let claudeScope = ResetAttemptStore.scope(provider: .claude, accountID: claudeAccount.id, creditID: "next")
         func post(_ result: String, extra: [String: Any] = [:]) -> @Sendable () throws -> (Data, Int) {

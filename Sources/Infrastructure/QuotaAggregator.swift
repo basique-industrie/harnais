@@ -2,12 +2,16 @@ import Domain
 import Foundation
 
 public struct QuotaAggregator: Sendable {
+    public typealias ClaudeProbe = @Sendable (Account, [String: String]) throws -> ProbeResult
     public var identity: AppIdentity
     public var isolation: IsolationEngine
+    private var claudeProbe: ClaudeProbe
 
-    public init(identity: AppIdentity = .current, isolation: IsolationEngine = IsolationEngine()) {
+    public init(identity: AppIdentity = .current, isolation: IsolationEngine = IsolationEngine(),
+                claudeProbe: @escaping ClaudeProbe = { try ClaudeQuotaProbe().probe(account: $0, environment: $1) }) {
         self.identity = identity
         self.isolation = isolation
+        self.claudeProbe = claudeProbe
     }
 
     public func refresh(accounts: [Account], startUnusedCodexWeeks: Bool = false) -> QuotaFeed {
@@ -21,7 +25,7 @@ public struct QuotaAggregator: Sendable {
             do {
                 switch account.provider {
                 case .claude:
-                    result = try ClaudeQuotaProbe().probe(account: account, environment: env)
+                    result = try claudeProbe(account, env)
                 case .codex:
                     result = try CodexQuotaProbe().probe(account: account, environment: env)
                 case .opencode:
@@ -31,6 +35,13 @@ public struct QuotaAggregator: Sendable {
                 }
             } catch {
                 result = ProbeResult(error: error.localizedDescription)
+            }
+            if let error = result.error, result.quotas.isEmpty, account.provider == .claude,
+               var prior = previous.accounts.first(where: { $0.id == account.id.uuidString }), !prior.quotas.isEmpty {
+                prior.label = account.label
+                prior.error = error + " Showing the last known usage."
+                snapshots.append(prior)
+                continue
             }
             var pending = false
             if account.provider == .codex {

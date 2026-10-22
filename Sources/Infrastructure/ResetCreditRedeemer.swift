@@ -8,7 +8,7 @@ import Foundation
 /// - Claude: `POST /api/organizations/{org}/reset_rate_limits` with the `cedar_ember`
 ///   program, a `grant_id` and a `request_id`. Claude only redeems its designated next grant.
 ///
-/// Two steps, never one: `plan` is read-only and fetches live state for the confirmation
+/// Two steps, never one: `plan` reads recent provider state for the confirmation
 /// dialog; `redeem` is the only call that can spend a credit. Every transport is injected so
 /// tests never reach a provider.
 public struct ResetCreditRedeemer: Sendable {
@@ -68,6 +68,7 @@ public struct ResetCreditRedeemer: Sendable {
     private func claudePlan(_ account: Account, _ environment: [String: String], _ now: Date) throws -> ResetPlan {
         let request = try claudeRequest(account, environment, Self.claudeUsageURL, "GET")
         let (body, status) = try http(request)
+        if status == 429 { throw HarnaisError.processFailed(ClaudeUsageClient.rateLimitMessage + " No reset was sent.") }
         guard status == 200, let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] else {
             throw HarnaisError.processFailed("Claude usage returned \(status). Sign in again if this persists.")
         }
@@ -179,7 +180,14 @@ public struct ResetCreditRedeemer: Sendable {
 
     // MARK: Live transports
 
-    public static let liveHTTP: HTTP = { try HTTPClient.sendBlocking($0, timeout: 25) }
+    public static let liveHTTP: HTTP = { request in
+        if request.httpMethod == "GET" {
+            return try ClaudeUsageClient.shared.send(request, maximumAge: ClaudeUsageClient.resetMaxAge)
+        }
+        return try ClaudeUsageClient.shared.withInvalidatedUsage(request) {
+            try HTTPClient.sendBlocking(request, timeout: 25)
+        }
+    }
 
     public static let liveClaudeRequest: ClaudeRequest = { account, environment, url, method in
         try ClaudeQuotaProbe().authorizedRequest(url: url, method: method, account: account, environment: environment)

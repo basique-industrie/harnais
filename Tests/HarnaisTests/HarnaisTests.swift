@@ -6,6 +6,10 @@ import Infrastructure
 @main
 enum HarnaisSelfTests {
     static func main() throws {
+        if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--claude-usage-probe-fixture" {
+            try ClaudeUsageClientTests.runProcessFixture(directory: URL(fileURLWithPath: CommandLine.arguments[2]))
+            return
+        }
         if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--write-t3-contract-fixtures" {
             try T3ContractFixtures.write(to: URL(fileURLWithPath: CommandLine.arguments[2]))
             return
@@ -83,6 +87,7 @@ enum HarnaisSelfTests {
         try ResetCreditsTests.run(expect: expect)
         try CodexCreditsTests.run(expect: expect)
         try ResetRedemptionTests.run(root: root, expect: expect)
+        try ClaudeUsageClientTests.run(root: root, expect: expect)
         UsagePresentationTests.run(expect: expect)
 
         let isolation = IsolationEngine(

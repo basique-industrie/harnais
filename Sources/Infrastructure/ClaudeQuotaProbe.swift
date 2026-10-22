@@ -3,9 +3,12 @@ import Foundation
 
 public struct ClaudeQuotaProbe: Sendable {
     public var runner: ProcessRunner
+    public var http: @Sendable (URLRequest) throws -> (Data, Int)
 
-    public init(runner: ProcessRunner = ProcessRunner()) {
+    public init(runner: ProcessRunner = ProcessRunner(),
+                http: @escaping @Sendable (URLRequest) throws -> (Data, Int) = { try ClaudeUsageClient.shared.send($0) }) {
         self.runner = runner
+        self.http = http
     }
 
     public func probe(account: Account, environment: [String: String]) throws -> ProbeResult {
@@ -48,20 +51,34 @@ public struct ClaudeQuotaProbe: Sendable {
     }
 
     private func probeAPI(account: Account, environment: [String: String]) throws -> ProbeResult {
-        var request = try authorizedRequest(
+        let request = try authorizedRequest(
             url: URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1&skip_spend=1")!,
             method: "GET", account: account, environment: environment
         )
-        var (body, status) = try HTTPClient.getBlocking(request)
+        let result: ProbeResult
+        do { result = try fetchUsage(request) }
+        catch HarnaisError.notLoggedIn { throw HarnaisError.notLoggedIn }
+        catch { return ProbeResult(error: error.localizedDescription) }
+        return ProbeResult(email: AccountMetadata().email(for: account), quotas: result.quotas,
+                           error: result.error, resetCredits: result.resetCredits)
+    }
+
+    public func fetchUsage(_ authorizedRequest: URLRequest) throws -> ProbeResult {
+        var request = authorizedRequest
+        var (body, status) = try http(request)
+        // A 429 must neither trigger a second GET nor fall back to the CLI's older usage.
+        if status == 429 { return ProbeResult(error: ClaudeUsageClient.rateLimitMessage) }
         // An optional credit query must not prevent regular limits from loading.
-        if status != 200 {
+        if status == 400 || status == 404 {
             request.url = URL(string: "https://api.anthropic.com/api/oauth/usage")!
-            (body, status) = try HTTPClient.getBlocking(request)
+            (body, status) = try http(request)
         }
+        if status == 429 { return ProbeResult(error: ClaudeUsageClient.rateLimitMessage) }
+        if status == 401 { throw HarnaisError.notLoggedIn }
         guard status == 200,
               let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
         else { throw HarnaisError.processFailed("Claude usage API returned \(status)") }
-        return ProbeResult(email: AccountMetadata().email(for: account), quotas: Self.parseAPI(json),
+        return ProbeResult(quotas: Self.parseAPI(json),
                            resetCredits: ResetCreditsParser.claude(json["cedar_ember"]))
     }
 

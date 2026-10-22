@@ -145,6 +145,7 @@ harnais mcp serve <name>
 | Profiles | `~/.harnais/profiles/<provider>/<slug>/` |
 | Wrappers | `~/.harnais/bin/` |
 | Quotas | `~/.harnais/quotas.json` |
+| Claude usage responses and retry deadlines | `~/.harnais/claude-usage/` |
 | Islands publish toggles | `~/.harnais/islands.json` |
 | Usage cache | `~/.harnais/usage-cache.json` |
 
@@ -155,6 +156,11 @@ filter on it. The Iles probe fetches quotas and harness sync state together
 `lastApply` with files) so Iles matches exactly what Harnais synced.
 Harnesses = Claude, Codex, Cursor, T3. Islands = Iles rings.
 Limits = live quotas. Spend = local cost/token estimates.
+
+Claude usage checks share cached responses and rate-limit cooldowns between the app
+and CLI processes, including Iles-triggered reads. See
+[Claude usage throttling and Iles](docs/claude-usage-throttling.md) for polling behavior,
+the distinction between usage-check 429s and exhausted quotas, and recovery steps.
 
 Codex accounts show their available extra usage credits only in the account's
 **Overview** tab. The balance refreshes with usage limits and stays separate from
