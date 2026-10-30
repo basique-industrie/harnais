@@ -9,13 +9,19 @@ const fixtures = JSON.parse(readFileSync(process.argv[2], 'utf8'));
 const legacy = process.argv[3] === "legacy";
 let checks = 0;
 let requestChecks = 0;
+const settingsRead = WsRpcGroup.requests.get(fixtures.settingsReadMethod);
+assert.ok(settingsRead, `T3 no longer exposes ${fixtures.settingsReadMethod}`);
+const settingsSchema = settingsRead.successSchema.fields.settings;
+assert.ok(settingsSchema, 'T3 config no longer includes settings');
 for (const { id, instance } of fixtures.instances) {
   const decoded = Schema.decodeUnknownSync(ProviderInstanceConfig)(instance);
   assert.equal(decoded.driver, instance.driver);
   assert.equal(decoded.accentColor, instance.accentColor);
   const settings = Schema.decodeUnknownSync(ServerSettings)({providerInstances: {[id]: instance}});
   assert.equal(settings.providerInstances[id].displayName, instance.displayName);
-  checks += 2;
+  const configSettings = Schema.decodeUnknownSync(settingsSchema)({providerInstances: {[id]: instance}});
+  assert.deepEqual(JSON.parse(JSON.stringify(configSettings.providerInstances[id])), JSON.parse(JSON.stringify(decoded)));
+  checks += 3;
 }
 for (const request of fixtures.requests) {
   if (request.legacy !== undefined && request.legacy !== legacy) continue;

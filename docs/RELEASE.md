@@ -124,9 +124,10 @@ and ship a bridging release when rotation is necessary.
 
 ## T3 compatibility
 
-CI validates Harnais-generated profiles and RPC payloads against the actual
-Stable and Nightly schemas pinned in `scripts/t3-compatibility.json`, including
-checks that required fields survive decoding. A separate daily workflow tests
+CI validates Harnais-generated profiles, RPC payloads and the settings returned
+by `server.getConfig` against the actual Stable and Nightly schemas pinned in
+`scripts/t3-compatibility.json`, including the older whole-map and mutation APIs
+and checks that required fields survive decoding. A separate daily workflow tests
 current upstream releases and saves the tested tags and commits as an artifact.
 It never opens user settings or uses account credentials. Update the pins only
 after reviewing a successful run; daily changes do not make old PRs unstable.

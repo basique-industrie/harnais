@@ -19,7 +19,9 @@ enum T3ServerTests {
                 result = .success(try await server.withSession(scopes: ["orchestration:read"]) { session in
                     let connection = session.connect()
                     defer { Task { await connection.close() } }
-                    return T3ProviderStatus.parseConfig(try await connection.request("server.getConfig"))
+                    let config = try await connection.request(T3SettingsUpdate.readMethod)
+                    _ = try T3SettingsUpdate.providerInstances(fromConfig: config)
+                    return T3ProviderStatus.parseConfig(config)
                 })
             } catch {
                 result = .failure(error)

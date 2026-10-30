@@ -4,6 +4,22 @@ import Foundation
 /// single-instance mutations. Both paths must verify the returned settings: older
 /// Effect schemas silently discard fields they do not recognize.
 public enum T3SettingsUpdate {
+    // getConfig includes settings in both older and current T3 builds. The
+    // separate getSettings RPC was removed in October 2026.
+    public static let readMethod = "server.getConfig"
+
+    public static func providerInstances(fromConfig data: Data) throws -> [String: Any] {
+        guard let config = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let settings = config["settings"] as? [String: Any],
+              let instances = settings["providerInstances"] as? [String: Any]
+        else {
+            // An unreadable server snapshot must not turn into an empty merge
+            // or a direct file edit while T3 is running.
+            throw T3ServerError.rejected("T3 Code returned settings Harnais cannot read. Sync was cancelled; check T3 compatibility.")
+        }
+        return instances
+    }
+
     public static func usesLegacyPatch(version: String?) -> Bool {
         guard let version,
               let patch = Int(version.split(separator: "-")[0].split(separator: ".").last ?? ""),

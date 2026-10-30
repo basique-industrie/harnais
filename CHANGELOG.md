@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3 — 2026-10-30
+
+- Restore account synchronization with current T3 Code builds, including new Claude profiles. Read settings through `server.getConfig` after T3 removed `server.getSettings`, while retaining compatibility with older releases.
+- Cancel synchronization if the server returns unreadable settings, preserving existing profiles instead of falling back to a file edit.
+- Validate the settings response as well as requests against current Stable and Nightly T3 contracts and the older supported APIs.
+
 ## 0.5.2 — 2026-10-22
 
 - Coordinate Claude usage checks across Harnais and its command-line helper, including calls from Iles. Reuse recent readings and share retry deadlines to reduce repeated requests and HTTP 429 errors.

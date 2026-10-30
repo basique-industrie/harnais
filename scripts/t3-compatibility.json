@@ -2,14 +2,24 @@
   "repository": "pingdotgg/t3code",
   "releases": [
     {
-      "channel": "stable",
+      "channel": "legacy-stable",
       "tag": "v0.0.45",
       "commit": "6c8fed35dded9ff71c5b46807125457acbb76be6"
     },
     {
-      "channel": "nightly",
+      "channel": "legacy-nightly",
       "tag": "v0.0.46-nightly.20261008.2813",
       "commit": "30cc788975500a8c00d32a50f348174d1ce578d1"
+    },
+    {
+      "channel": "stable",
+      "tag": "v0.1.5",
+      "commit": "6d450a4284852af137b2f3407fddd89eb76e7644"
+    },
+    {
+      "channel": "nightly",
+      "tag": "v0.1.6-nightly.20261030.3917",
+      "commit": "97e35bcf23e4dcf34c2dcffadd37c08db0e01e52"
     }
   ]
 }
