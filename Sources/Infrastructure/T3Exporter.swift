@@ -237,11 +237,8 @@ public struct T3Exporter: Sendable {
         try await server.withSession { session in
             let connection = session.connect()
             defer { Task { await connection.close() } }
-            let settings = try await connection.request("server.getSettings")
-            guard let root = try? JSONSerialization.jsonObject(with: settings) as? [String: Any],
-                  root["providerInstances"] == nil || root["providerInstances"] is [String: Any]
-            else { throw T3ServerError.unavailable("T3 Code returned settings Harnais cannot read.") }
-            let current = root["providerInstances"] as? [String: Any] ?? [:]
+            let config = try await connection.request(T3SettingsUpdate.readMethod)
+            let current = try T3SettingsUpdate.providerInstances(fromConfig: config)
             let merged = try transform(current)
             let changed = merged.keys.sorted().filter { id in
                 guard let after = merged[id] as? [String: Any] else { return false }

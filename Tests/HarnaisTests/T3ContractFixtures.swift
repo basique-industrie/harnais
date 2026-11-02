@@ -29,12 +29,11 @@ enum T3ContractFixtures {
                 }
             }
         }
-        try request("server.getSettings", [:])
-        try request("server.getConfig", [:])
+        try request(T3SettingsUpdate.readMethod, [:])
         try request("provider.auth.start", ["instanceId": "harnais_cursor_fixture"])
         try request("provider.auth.subscribe", ["instanceId": "harnais_cursor_fixture"])
         try request("provider.auth.cancel", ["instanceId": "harnais_cursor_fixture", "flowId": "fixture-flow"])
-        let fixture: [String: Any] = ["instances": instances, "requests": requests]
+        let fixture: [String: Any] = ["instances": instances, "requests": requests, "settingsReadMethod": T3SettingsUpdate.readMethod]
         try JSONSerialization.data(withJSONObject: fixture, options: [.prettyPrinted, .sortedKeys])
             .write(to: directory.appendingPathComponent("harnais.json"))
     }

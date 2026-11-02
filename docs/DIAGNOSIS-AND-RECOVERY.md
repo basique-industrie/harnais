@@ -48,6 +48,19 @@ recognized non-sensitive isolation environment entries can be retained for
 undo. Secrets, model choices and arbitrary environment values are excluded.
 A sync that changes additional values remains visible but is not undoable.
 
+## Claude is synced but turns fail to start
+
+A saved T3 profile and a successful `claude auth status` check confirm its
+configuration and login, but do not guarantee that Claude can start a turn.
+Claude can still require interactive onboarding or a review of updated terms.
+T3 may show only **Provider turn failed** when this happens.
+
+Select the affected account in Harnais and choose **Open in Terminal**. This
+starts Claude with that account's isolated profile. Review any onboarding or
+terms prompt yourself, then retry the turn in T3. Opening another account's
+terminal does not complete this step for the affected profile. Harnais does not
+accept agreements or copy another profile's acceptance settings.
+
 ## Undo
 
 Choose **Preview undo** on an applied entry, review the changes, then apply.
